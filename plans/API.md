@@ -29,7 +29,10 @@ All action endpoints (POST/DELETE that modify state) accept standard parameters:
   },
   "screenshot": {
     "area": "viewport",
-    "markup": "interactive"
+    "markup": "interactive",
+    "format": "webp",
+    "quality": 80,
+    "mouse": "normal"
   }
 }
 ```
@@ -63,7 +66,17 @@ Bounding boxes drawn over elements to help identify interactive targets:
 - Element index labels are drawn for reference
 - Boxes are semi-transparent to not obscure content
 
-**Example request with markup:**
+#### Screenshot Mouse
+
+Control mouse cursor visibility and size in screenshots:
+
+| Value | Description |
+|-------|-------------|
+| `normal` | Show normal mouse cursor (default) |
+| `none` | Hide mouse cursor |
+| `large` | Show mouse cursor at 2x size (for visibility) |
+
+**Example request with markup and large cursor:**
 ```json
 {
   "x": 100,
@@ -71,7 +84,10 @@ Bounding boxes drawn over elements to help identify interactive targets:
   "wait_until": {"type": "action_complete"},
   "screenshot": {
     "area": "viewport",
-    "markup": "interactive"
+    "markup": "interactive",
+    "format": "webp",
+    "quality": 80,
+    "mouse": "large"
   }
 }
 ```
@@ -433,13 +449,27 @@ File chooser was dismissed without selection.
 
 ### Screenshot Configuration
 
-Control screenshot capture via request headers or global config:
+Control screenshot capture via the `screenshot` object in the request body:
 
+```json
+{
+  "screenshot": {
+    "area": "viewport",
+    "markup": "interactive",
+    "format": "webp",
+    "quality": 80,
+    "mouse": "normal"
+  }
+}
 ```
-X-ABP-Screenshot-Format: webp
-X-ABP-Screenshot-Quality: 80
-X-ABP-Screenshot-Disabled: false
-```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `area` | string | `viewport` | Capture area: `none`, `viewport` |
+| `markup` | string | `none` | Element markup: `none`, `interactive`, `clickable`, `typeable`, `inputs` |
+| `format` | string | `webp` | Image format: `webp`, `jpeg`, `png` |
+| `quality` | number | 80 | Quality for jpeg/webp (1-100), ignored for png |
+| `mouse` | string | `normal` | Cursor visibility: `normal`, `none`, `large` (2x size) |
 
 | Format | Quality Range | Notes |
 |--------|---------------|-------|
@@ -1308,6 +1338,91 @@ POST /tabs/{tab_id}/screenshot/region
 }
 ```
 
+### Screenshot with Wait
+
+```
+POST /tabs/{tab_id}/screenshot/wait
+```
+
+Capture a screenshot after waiting for a condition. Follows the standard action envelope pattern with full event capture.
+
+**Request:**
+```json
+{
+  "wait_until": {
+    "type": "action_complete",
+    "timeout_ms": 30000
+  },
+  "screenshot": {
+    "area": "viewport",
+    "markup": "interactive",
+    "format": "webp",
+    "quality": 80,
+    "mouse": "normal"
+  },
+  "full_page": false
+}
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `wait_until` | object | `{"type": "action_complete"}` | Wait condition before capture |
+| `screenshot` | object | See below | Screenshot options |
+| `full_page` | boolean | `false` | Capture full scrollable page |
+
+**Response (standard action envelope):**
+```json
+{
+  "success": true,
+  "data": {
+    "result": {
+      "width": 1920,
+      "height": 1080,
+      "full_page": false
+    },
+    "screenshot": {
+      "data": "UklGRlYAAABXRUJQVlA4I...",
+      "format": "webp",
+      "width": 1920,
+      "height": 1080,
+      "timestamp": 1699999999500,
+      "markup": "interactive",
+      "marked_elements": [
+        {
+          "index": 0,
+          "type": "button",
+          "bounds": {"x": 100, "y": 200, "width": 80, "height": 32},
+          "center": {"x": 140, "y": 216},
+          "text": "Submit"
+        }
+      ]
+    },
+    "scroll": {
+      "horizontal_percent": 0,
+      "vertical_percent": 25.5,
+      "horizontal_px": 0,
+      "vertical_px": 1200,
+      "page_width": 1920,
+      "page_height": 4700,
+      "viewport_width": 1920,
+      "viewport_height": 1080
+    },
+    "events": [],
+    "timing": {
+      "action_started": 1699999999000,
+      "wait_completed": 1699999999500,
+      "total_ms": 500
+    }
+  }
+}
+```
+
+**Use cases:**
+- Wait for page to stabilize after navigation before capturing
+- Wait for network idle to ensure all images/content loaded
+- Capture with element markup for AI agent decision-making
+- Get scroll position and page dimensions along with screenshot
+
 ---
 
 ## Network
@@ -1408,58 +1523,6 @@ POST /tabs/{tab_id}/network/intercepted/{request_id}/fulfill
 
 ```
 POST /tabs/{tab_id}/network/intercepted/{request_id}/abort
-```
-
----
-
-## Cookies
-
-### Get All Cookies
-
-```
-GET /tabs/{tab_id}/cookies
-```
-
-### Get Cookies for URL
-
-```
-GET /tabs/{tab_id}/cookies?url=https://example.com
-```
-
-### Set Cookie
-
-```
-POST /tabs/{tab_id}/cookies
-```
-
-**Request:**
-```json
-{
-  "name": "session_id",
-  "value": "abc123",
-  "domain": "example.com",
-  "path": "/",
-  "secure": true,
-  "http_only": true,
-  "same_site": "Strict",
-  "expires": 1699999999
-}
-```
-
-### Delete Cookie
-
-```
-DELETE /tabs/{tab_id}/cookies/{cookie_name}
-```
-
-**Query params:**
-- `domain=example.com`
-- `path=/`
-
-### Clear All Cookies
-
-```
-DELETE /tabs/{tab_id}/cookies
 ```
 
 ---

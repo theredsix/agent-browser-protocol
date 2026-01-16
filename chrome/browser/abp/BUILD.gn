@@ -1,0 +1,20 @@
+import("//build/config/features.gni")
+
+source_set("abp") {
+  sources = [
+    "abp_controller.cc",
+    "abp_controller.h",
+    "abp_http_server.cc",
+    "abp_http_server.h",
+    "abp_switches.cc",
+    "abp_switches.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/browser/ui",
+    "//content/public/browser",
+    "//net",
+    "//ui/base",
+  ]
+}

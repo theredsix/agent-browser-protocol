@@ -34,6 +34,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_impl.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
+#include "chrome/browser/abp/abp_http_server.h"
+#include "chrome/browser/abp/abp_switches.h"
 #include "chrome/browser/component_updater/registration.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/enterprise/chrome_browser_main_extra_parts_enterprise.h"
@@ -1622,6 +1624,23 @@ void ChromeBrowserMainParts::PostBrowserStart() {
 #if BUILDFLAG(IS_WIN)
   webnn::SchedulePlatformRuntimeInstallationIfRequired();
 #endif
+
+  // Start ABP HTTP server if enabled via command line
+  {
+    auto* command_line = base::CommandLine::ForCurrentProcess();
+    if (command_line->HasSwitch(abp::switches::kEnableAbp)) {
+      int port = 9222;
+      if (command_line->HasSwitch(abp::switches::kAbpPort)) {
+        base::StringToInt(
+            command_line->GetSwitchValueASCII(abp::switches::kAbpPort), &port);
+      }
+      // Use raw pointer to avoid exit-time destructor. The server lives
+      // for the lifetime of the browser process.
+      static abp::AbpHttpServer* g_abp_server = nullptr;
+      g_abp_server = new abp::AbpHttpServer(port);
+      g_abp_server->Start();
+    }
+  }
 
   // At this point, StartupBrowserCreator::Start has run creating initial
   // browser windows and tabs, but no progress has been made in loading
