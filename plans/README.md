@@ -13,6 +13,8 @@ A Chromium fork designed for engine-native browser control, exposing a REST-base
 | [agent-browser-protocol.md](./agent-browser-protocol.md) | Core ABP architecture and design | Draft |
 | [API.md](./API.md) | Complete REST API specification | Draft |
 | [mcp.md](./mcp.md) | MCP server for AI agent integration | Draft |
+| [implementation.md](./implementation.md) | Minimal implementation plan | Draft |
+| [wait_spec.md](./wait_spec.md) | Action complete wait heuristic specification | Draft |
 | http-server-implementation.md | HTTP server implementation details | TODO |
 | input-injection-design.md | Input injection at engine level | TODO |
 | dom-access-architecture.md | Direct DOM access patterns | TODO |

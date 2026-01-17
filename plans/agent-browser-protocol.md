@@ -52,7 +52,7 @@ For complete API reference, see [API.md](./API.md).
 Embedded HTTP server handling REST requests. Built on Chromium's network stack.
 
 **Responsibilities:**
-- Listen on configurable port (default: 9222)
+- Listen on configurable port (default: 8222)
 - Parse/validate REST requests
 - Route to appropriate controllers
 - Serialize responses as JSON
@@ -242,7 +242,7 @@ Rate limiting and request size limits to prevent resource exhaustion.
 
 ```
 --enable-abp                    Enable Agent Browser Protocol server
---abp-port=9222                 Port for ABP server (default: 9222)
+--abp-port=8222                 Port for ABP server (default: 8222)
 --abp-auth-token=<token>        Require bearer token authentication
 --abp-allow-remote              Allow non-localhost connections
 --abp-cors-origin=<origin>      Set allowed CORS origin

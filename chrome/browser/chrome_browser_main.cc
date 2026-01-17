@@ -1629,7 +1629,7 @@ void ChromeBrowserMainParts::PostBrowserStart() {
   {
     auto* command_line = base::CommandLine::ForCurrentProcess();
     if (command_line->HasSwitch(abp::switches::kEnableAbp)) {
-      int port = 9222;
+      int port = 8222;
       if (command_line->HasSwitch(abp::switches::kAbpPort)) {
         base::StringToInt(
             command_line->GetSwitchValueASCII(abp::switches::kAbpPort), &port);

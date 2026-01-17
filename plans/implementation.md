@@ -113,7 +113,7 @@ namespace abp::switches {
 // Enable ABP HTTP server
 extern const char kEnableAbp[];
 
-// Port for HTTP server (default: 9222)
+// Port for HTTP server (default: 8222)
 extern const char kAbpPort[];
 
 }  // namespace abp::switches
@@ -837,7 +837,7 @@ void StartAbpServerIfEnabled() {
     return;
   }
 
-  int port = 9222;
+  int port = 8222;
   if (command_line->HasSwitch(abp::switches::kAbpPort)) {
     base::StringToInt(
         command_line->GetSwitchValueASCII(abp::switches::kAbpPort),
@@ -858,37 +858,37 @@ void StartAbpServerIfEnabled() {
 ### Start Chrome with ABP
 
 ```bash
-./out/Default/chrome --enable-abp --abp-port=9222
+./out/Default/chrome --enable-abp --abp-port=8222
 ```
 
 ### API Examples
 
 ```bash
 # List all tabs
-curl http://localhost:9222/api/v1/tabs
+curl http://localhost:8222/api/v1/tabs
 
 # Get specific tab
-curl http://localhost:9222/api/v1/tabs/ABC123
+curl http://localhost:8222/api/v1/tabs/ABC123
 
 # Create new tab
-curl -X POST http://localhost:9222/api/v1/tabs \
+curl -X POST http://localhost:8222/api/v1/tabs \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com"}'
 
 # Navigate existing tab
-curl -X POST http://localhost:9222/api/v1/tabs/ABC123/navigate \
+curl -X POST http://localhost:8222/api/v1/tabs/ABC123/navigate \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com"}'
 
 # Close tab
-curl -X DELETE http://localhost:9222/api/v1/tabs/ABC123
+curl -X DELETE http://localhost:8222/api/v1/tabs/ABC123
 
 # Reload
-curl -X POST http://localhost:9222/api/v1/tabs/ABC123/reload
+curl -X POST http://localhost:8222/api/v1/tabs/ABC123/reload
 
 # Go back/forward
-curl -X POST http://localhost:9222/api/v1/tabs/ABC123/back
-curl -X POST http://localhost:9222/api/v1/tabs/ABC123/forward
+curl -X POST http://localhost:8222/api/v1/tabs/ABC123/back
+curl -X POST http://localhost:8222/api/v1/tabs/ABC123/forward
 ```
 
 ---
@@ -899,7 +899,7 @@ curl -X POST http://localhost:9222/api/v1/tabs/ABC123/forward
 - [ ] Create the 6 source files
 - [ ] Add BUILD.gn
 - [ ] Hook into Chrome startup
-- [ ] Verify server starts: `curl localhost:9222/api/v1/tabs`
+- [ ] Verify server starts: `curl localhost:8222/api/v1/tabs`
 
 ### Phase 2: Tab Management (1-2 days)
 - [ ] ListTabs - working
@@ -979,21 +979,21 @@ The project is "done enough" when you can:
 
 ```bash
 # 1. List tabs
-curl localhost:9222/api/v1/tabs
+curl localhost:8222/api/v1/tabs
 
 # 2. Navigate
-curl -X POST localhost:9222/api/v1/tabs/{id}/navigate \
+curl -X POST localhost:8222/api/v1/tabs/{id}/navigate \
   -d '{"url":"https://example.com"}'
 
 # 3. Screenshot
-curl localhost:9222/api/v1/tabs/{id}/screenshot > screenshot.json
+curl localhost:8222/api/v1/tabs/{id}/screenshot > screenshot.json
 
 # 4. Click
-curl -X POST localhost:9222/api/v1/tabs/{id}/click \
+curl -X POST localhost:8222/api/v1/tabs/{id}/click \
   -d '{"x":100,"y":200}'
 
 # 5. Type
-curl -X POST localhost:9222/api/v1/tabs/{id}/type \
+curl -X POST localhost:8222/api/v1/tabs/{id}/type \
   -d '{"text":"hello world"}'
 ```
 

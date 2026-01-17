@@ -30,14 +30,14 @@ The ABP MCP Server exposes browser control capabilities through the Model Contex
 Standard input/output for local process communication.
 
 ```bash
-abp-mcp-server --transport stdio --abp-url http://localhost:9222
+abp-mcp-server --transport stdio --abp-url http://localhost:8222
 ```
 
 ### SSE (Server-Sent Events)
 HTTP-based transport for remote connections.
 
 ```bash
-abp-mcp-server --transport sse --port 3000 --abp-url http://localhost:9222
+abp-mcp-server --transport sse --port 3000 --abp-url http://localhost:8222
 ```
 
 ## Configuration
@@ -45,7 +45,7 @@ abp-mcp-server --transport sse --port 3000 --abp-url http://localhost:9222
 ### Environment Variables
 
 ```bash
-ABP_URL=http://localhost:9222    # ABP REST server URL
+ABP_URL=http://localhost:8222    # ABP REST server URL
 ABP_AUTH_TOKEN=secret            # Optional auth token
 ABP_MCP_PORT=3000                # Port for SSE transport
 ABP_MCP_LOG_LEVEL=info           # Logging level
@@ -56,7 +56,7 @@ ABP_MCP_LOG_LEVEL=info           # Logging level
 ```json
 {
   "abp": {
-    "url": "http://localhost:9222",
+    "url": "http://localhost:8222",
     "auth_token": null,
     "timeout_ms": 30000
   },
@@ -991,7 +991,7 @@ Add to `claude_desktop_config.json`:
       "command": "abp-mcp-server",
       "args": ["--transport", "stdio"],
       "env": {
-        "ABP_URL": "http://localhost:9222"
+        "ABP_URL": "http://localhost:8222"
       }
     }
   }

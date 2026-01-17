@@ -3,7 +3,7 @@
 ## Base URL
 
 ```
-http://localhost:9222/api/v1
+http://localhost:8222/api/v1
 ```
 
 ## Authentication
@@ -30,8 +30,6 @@ All action endpoints (POST/DELETE that modify state) accept standard parameters:
   "screenshot": {
     "area": "viewport",
     "markup": "interactive",
-    "format": "webp",
-    "quality": 80,
     "mouse": "normal"
   }
 }
@@ -85,8 +83,6 @@ Control mouse cursor visibility and size in screenshots:
   "screenshot": {
     "area": "viewport",
     "markup": "interactive",
-    "format": "webp",
-    "quality": 80,
     "mouse": "large"
   }
 }
@@ -142,8 +138,7 @@ All action responses include a screenshot, scroll position, and event log:
   "data": {
     "result": { ... },
     "screenshot": {
-      "data": "base64-encoded-image",
-      "format": "webp",
+      "data": "base64-encoded-webp-image",
       "width": 1920,
       "height": 1080,
       "timestamp": 1699999999999,
@@ -209,8 +204,7 @@ All action responses include a screenshot, scroll position, and event log:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `data` | string | Base64-encoded image |
-| `format` | string | Image format (`webp`, `png`, `jpeg`) |
+| `data` | string | Base64-encoded WebP image |
 | `width` | number | Image width in pixels |
 | `height` | number | Image height in pixels |
 | `timestamp` | number | Capture timestamp |
@@ -456,8 +450,6 @@ Control screenshot capture via the `screenshot` object in the request body:
   "screenshot": {
     "area": "viewport",
     "markup": "interactive",
-    "format": "webp",
-    "quality": 80,
     "mouse": "normal"
   }
 }
@@ -467,15 +459,9 @@ Control screenshot capture via the `screenshot` object in the request body:
 |-------|------|---------|-------------|
 | `area` | string | `viewport` | Capture area: `none`, `viewport` |
 | `markup` | string | `none` | Element markup: `none`, `interactive`, `clickable`, `typeable`, `inputs` |
-| `format` | string | `webp` | Image format: `webp`, `jpeg`, `png` |
-| `quality` | number | 80 | Quality for jpeg/webp (1-100), ignored for png |
 | `mouse` | string | `normal` | Cursor visibility: `normal`, `none`, `large` (2x size) |
 
-| Format | Quality Range | Notes |
-|--------|---------------|-------|
-| `webp` | 1-100 | Default, best compression |
-| `jpeg` | 1-100 | Wide compatibility |
-| `png` | N/A | Lossless, larger size |
+**Format:** All screenshots are returned as WebP at quality 80. This is not configurable to ensure consistent bandwidth usage and simplify caching.
 
 ---
 
@@ -503,8 +489,7 @@ GET endpoints return data without screenshot/events (status queries):
     "details": { ... }
   },
   "screenshot": {
-    "data": "base64-encoded-image",
-    "format": "webp",
+    "data": "base64-encoded-webp-image",
     "width": 1920,
     "height": 1080,
     "timestamp": 1699999999999
@@ -787,7 +772,6 @@ POST /tabs/{tab_id}/navigate
     },
     "screenshot": {
       "data": "UklGRlYAAABXRUJQVlA4I...",
-      "format": "webp",
       "width": 1920,
       "height": 1080,
       "timestamp": 1699999999500
@@ -907,7 +891,6 @@ Performs a mouse click at the specified coordinates.
     },
     "screenshot": {
       "data": "UklGRlYAAABXRUJQVlA4I...",
-      "format": "webp",
       "width": 1920,
       "height": 1080,
       "timestamp": 1699999999500
@@ -1279,6 +1262,8 @@ Execute JavaScript in the page context and retrieve results.
 
 ## Screenshots
 
+All screenshots are returned as WebP format at quality 80.
+
 ### Full Page Screenshot
 
 ```
@@ -1286,11 +1271,9 @@ GET /tabs/{tab_id}/screenshot
 ```
 
 **Query params:**
-- `format=png` - Image format: `png`, `jpeg`, `webp`
-- `quality=80` - Quality for jpeg/webp (1-100)
 - `full_page=false` - Capture full scrollable page
 
-**Response:** Binary image data with appropriate Content-Type header.
+**Response:** Binary WebP image data with `Content-Type: image/webp` header.
 
 ### Screenshot to Base64
 
@@ -1301,8 +1284,6 @@ POST /tabs/{tab_id}/screenshot
 **Request:**
 ```json
 {
-  "format": "png",
-  "quality": 80,
   "full_page": false,
   "encoding": "base64"
 }
@@ -1313,7 +1294,7 @@ POST /tabs/{tab_id}/screenshot
 {
   "success": true,
   "data": {
-    "image": "iVBORw0KGgo...",
+    "image": "UklGRlYAAABXRUJQ...",
     "width": 1920,
     "height": 1080
   }
@@ -1333,7 +1314,6 @@ POST /tabs/{tab_id}/screenshot/region
   "y": 0,
   "width": 800,
   "height": 600,
-  "format": "png",
   "encoding": "base64"
 }
 ```
@@ -1356,8 +1336,6 @@ Capture a screenshot after waiting for a condition. Follows the standard action 
   "screenshot": {
     "area": "viewport",
     "markup": "interactive",
-    "format": "webp",
-    "quality": 80,
     "mouse": "normal"
   },
   "full_page": false
@@ -1367,7 +1345,7 @@ Capture a screenshot after waiting for a condition. Follows the standard action 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `wait_until` | object | `{"type": "action_complete"}` | Wait condition before capture |
-| `screenshot` | object | See below | Screenshot options |
+| `screenshot` | object | See below | Screenshot options (area, markup, mouse) |
 | `full_page` | boolean | `false` | Capture full scrollable page |
 
 **Response (standard action envelope):**
@@ -1382,7 +1360,6 @@ Capture a screenshot after waiting for a condition. Follows the standard action 
     },
     "screenshot": {
       "data": "UklGRlYAAABXRUJQVlA4I...",
-      "format": "webp",
       "width": 1920,
       "height": 1080,
       "timestamp": 1699999999500,
