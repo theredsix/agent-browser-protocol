@@ -342,6 +342,13 @@ blink::mojom::InputEventResultState RenderInputRouter::FilterInputEvent(
     return blink::mojom::InputEventResultState::kNoConsumerExists;
   }
 
+  // Block real system input when ABP input-only mode is enabled.
+  // Only allow events marked with kFromDebugger (from CDP/ABP).
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("abp-input-only") &&
+      !(event.GetModifiers() & WebInputEvent::kFromDebugger)) {
+    return blink::mojom::InputEventResultState::kNoConsumerExists;
+  }
+
   // Don't ignore touch cancel events, since they may be sent while input
   // events are being ignored in order to keep the renderer from getting
   // confused about how many touches are active.

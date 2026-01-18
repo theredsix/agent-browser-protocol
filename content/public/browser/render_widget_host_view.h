@@ -16,6 +16,7 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/input/pointer_lock_result.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/ime/mojom/virtual_keyboard_types.mojom-forward.h"
 #include "ui/display/screen_infos.h"
 #include "ui/gfx/geometry/point_conversions.h"
@@ -320,6 +321,10 @@ class CONTENT_EXPORT RenderWidgetHostView {
 
   // Returns true if this widget is a HTML popup, e.g. a <select> menu.
   virtual bool IsHTMLFormPopup() const = 0;
+
+  // ABP extension: Returns the last set cursor type for this view.
+  // Returns kPointer by default if cursor type is unknown.
+  virtual ui::mojom::CursorType GetLastCursorType() = 0;
 };
 
 }  // namespace content

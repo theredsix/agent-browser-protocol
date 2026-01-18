@@ -5,17 +5,40 @@
 #include <memory>
 #include <string>
 
+#include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
+#include "content/public/browser/render_widget_host_view.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-forward.h"
 
 namespace content {
 class WebContents;
 }
 
 namespace abp {
+
+class AbpHistoryController;
+
+// Context for recording actions with history
+struct ActionContext {
+  ActionContext();
+  ~ActionContext();
+  ActionContext(const ActionContext&) = delete;
+  ActionContext& operator=(const ActionContext&) = delete;
+  ActionContext(ActionContext&&);
+  ActionContext& operator=(ActionContext&&);
+
+  std::string tab_id;
+  std::string action_type;
+  base::Value::Dict params;
+  int64_t start_time = 0;
+  std::string screenshot_before_path;
+};
 
 using ResponseCallback = base::OnceCallback<void(int status, std::string body)>;
 
@@ -71,11 +94,18 @@ class AbpController {
     std::string mouse = "normal";    // normal, none, large
   };
 
+  // Set the history controller for action recording
+  void SetHistoryController(AbpHistoryController* history_controller);
+
   // Route incoming HTTP request to appropriate handler
   void HandleRequest(const std::string& method,
                      const std::string& path,
                      const std::string& body,
                      ResponseCallback callback);
+
+  // Center the mouse cursor in the active tab's viewport
+  // Used for ABP input-only mode initialization
+  void CenterMouseInActiveTab();
 
   // Helpers (public for use in lambdas)
   content::WebContents* FindWebContents(const std::string& tab_id);
@@ -98,9 +128,39 @@ class AbpController {
   void Navigate(const std::string& tab_id,
                 const base::Value::Dict& params,
                 ResponseCallback callback);
+  void OnNavigateBeforeScreenshot(const std::string& tab_id,
+                                  const std::string& url,
+                                  std::unique_ptr<ActionContext> context,
+                                  ResponseCallback callback,
+                                  std::string screenshot_before_path);
+  void OnNavigateAfterScreenshot(const std::string& url,
+                                 std::unique_ptr<ActionContext> context,
+                                 ResponseCallback callback,
+                                 std::string screenshot_after_path);
   void Reload(const std::string& tab_id, ResponseCallback callback);
+  void OnReloadBeforeScreenshot(const std::string& tab_id,
+                                std::unique_ptr<ActionContext> context,
+                                ResponseCallback callback,
+                                std::string screenshot_before_path);
+  void OnReloadAfterScreenshot(std::unique_ptr<ActionContext> context,
+                               ResponseCallback callback,
+                               std::string screenshot_after_path);
   void GoBack(const std::string& tab_id, ResponseCallback callback);
+  void OnGoBackBeforeScreenshot(const std::string& tab_id,
+                                std::unique_ptr<ActionContext> context,
+                                ResponseCallback callback,
+                                std::string screenshot_before_path);
+  void OnGoBackAfterScreenshot(std::unique_ptr<ActionContext> context,
+                               ResponseCallback callback,
+                               std::string screenshot_after_path);
   void GoForward(const std::string& tab_id, ResponseCallback callback);
+  void OnGoForwardBeforeScreenshot(const std::string& tab_id,
+                                   std::unique_ptr<ActionContext> context,
+                                   ResponseCallback callback,
+                                   std::string screenshot_before_path);
+  void OnGoForwardAfterScreenshot(std::unique_ptr<ActionContext> context,
+                                  ResponseCallback callback,
+                                  std::string screenshot_after_path);
 
   // Content
   void Screenshot(const std::string& tab_id,
@@ -131,21 +191,95 @@ class AbpController {
   void OnExecuteScriptResult(ResponseCallback callback,
                              bool success,
                              const std::string& result);
+  void OnClickBeforeScreenshot(const std::string& tab_id,
+                               double x,
+                               double y,
+                               std::unique_ptr<ActionContext> context,
+                               ResponseCallback callback,
+                               std::string screenshot_before_path);
   void OnClickPressedResult(const std::string& tab_id,
                             double x,
                             double y,
+                            std::unique_ptr<ActionContext> context,
                             ResponseCallback callback,
                             bool success,
                             const std::string& result);
-  void OnClickResult(ResponseCallback callback,
+  void OnClickResult(std::unique_ptr<ActionContext> context,
+                     ResponseCallback callback,
                      bool success,
                      const std::string& result);
-  void OnTypeResult(ResponseCallback callback,
+  void OnClickAfterScreenshot(std::unique_ptr<ActionContext> context,
+                              ResponseCallback callback,
+                              std::string screenshot_after_path);
+  void OnTypeBeforeScreenshot(const std::string& tab_id,
+                              const std::string& text,
+                              std::unique_ptr<ActionContext> context,
+                              ResponseCallback callback,
+                              std::string screenshot_before_path);
+  void OnTypeResult(std::unique_ptr<ActionContext> context,
+                    ResponseCallback callback,
                     bool success,
                     const std::string& result);
+  void OnTypeAfterScreenshot(std::unique_ptr<ActionContext> context,
+                             ResponseCallback callback,
+                             std::string screenshot_after_path);
+
+  // Take screenshot for history (before or after action)
+  // cursor_x/cursor_y: optional cursor position (-1 to use last known position)
+  // Uses direct C++ capture with CopyFromSurface
+  void CaptureScreenshotForHistory(
+      const std::string& tab_id,
+      int64_t timestamp,
+      bool is_before,
+      base::OnceCallback<void(std::string path)> callback,
+      double cursor_x = -1,
+      double cursor_y = -1);
+
+  // Direct screenshot capture using CopyFromSurface (no CDP/JS injection)
+  void CaptureScreenshotDirect(
+      content::WebContents* web_contents,
+      const base::FilePath& screenshot_path,
+      double cursor_x,
+      double cursor_y,
+      base::OnceCallback<void(std::string path)> callback);
+
+  // Callback when surface copy completes
+  void OnSurfaceCopied(
+      const base::FilePath& screenshot_path,
+      double cursor_x,
+      double cursor_y,
+      ui::mojom::CursorType cursor_type,
+      float device_scale_factor,
+      base::OnceCallback<void(std::string path)> callback,
+      const content::CopyFromSurfaceResult& result);
+
+  // Legacy CDP-based capture methods (kept for API screenshot endpoint)
+  void OnHistoryMarkupInjected(
+      const std::string& tab_id,
+      const base::FilePath& screenshot_path,
+      base::OnceCallback<void(std::string path)> callback,
+      bool success,
+      const std::string& result);
+  void OnHistoryScreenshotCaptured(
+      const std::string& tab_id,
+      const base::FilePath& screenshot_path,
+      base::OnceCallback<void(std::string path)> callback,
+      bool success,
+      const std::string& result);
+
+  // Record completed action to history
+  void RecordCompletedAction(const ActionContext& context,
+                             const base::Value* result,
+                             bool success,
+                             const std::string& error_code,
+                             const std::string& error_message,
+                             const std::string& screenshot_after_path);
 
   // CDP clients per WebContents (keyed by DevToolsAgentHost ID)
   std::map<std::string, std::unique_ptr<AbpCdpClient>> cdp_clients_;
+
+  // History controller (not owned)
+  raw_ptr<AbpHistoryController> history_controller_ = nullptr;
 
   base::WeakPtrFactory<AbpController> weak_factory_{this};
 };

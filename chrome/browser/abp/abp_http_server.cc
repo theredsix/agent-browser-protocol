@@ -2,10 +2,18 @@
 
 #include <optional>
 
+#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
+#include "chrome/browser/abp/abp_config.h"
 #include "chrome/browser/abp/abp_controller.h"
+#include "chrome/browser/abp/abp_event_observer.h"
+#include "chrome/browser/abp/abp_history_controller.h"
+#include "chrome/browser/abp/abp_switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
@@ -42,18 +50,58 @@ constexpr net::NetworkTrafficAnnotationTag kAbpTrafficAnnotation =
 
 AbpHttpServer::AbpHttpServer(int port) : port_(port) {}
 
-AbpHttpServer::~AbpHttpServer() = default;
+AbpHttpServer::~AbpHttpServer() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  // Stop event observer
+  if (event_observer_) {
+    event_observer_->Stop();
+  }
+
+  // Shutdown history (flushes database)
+  if (history_controller_) {
+    history_controller_->Shutdown();
+  }
+}
 
 void AbpHttpServer::Start() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+  // Load configuration
+  AbpConfig config = LoadAbpConfig();
+
+  // Create history controller
+  history_controller_ = std::make_unique<AbpHistoryController>(config);
+  history_controller_->Initialize();
+
+  // Create controller and connect to history
   controller_ = std::make_unique<AbpController>();
+  controller_->SetHistoryController(history_controller_.get());
+
+  // Create event observer for history
+  if (history_controller_->IsEnabled()) {
+    event_observer_ =
+        std::make_unique<AbpEventObserver>(history_controller_.get());
+    event_observer_->Start();
+  }
 
   // Safe to use Unretained because AbpHttpServer is a singleton that lives
   // for the lifetime of the browser process.
   content::GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&AbpHttpServer::StartOnIO, base::Unretained(this)));
+
+  // If ABP input-only mode is enabled, center the mouse cursor after a delay
+  // to ensure the browser window is fully ready
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAbpInputOnly)) {
+    LOG(INFO) << "ABP: Input-only mode enabled, will center mouse on startup";
+    content::GetUIThreadTaskRunner({})->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&AbpController::CenterMouseInActiveTab,
+                       base::Unretained(controller_.get())),
+        base::Seconds(2));
+  }
 }
 
 void AbpHttpServer::StartOnIO() {
@@ -109,6 +157,27 @@ void AbpHttpServer::HandleRequestOnUI(int connection_id,
   auto callback = base::BindOnce(&AbpHttpServer::OnResponseReady,
                                  base::Unretained(this),
                                  connection_id);
+
+  // Route history requests to history controller
+  // Path format: /api/v1/history/...
+  std::string clean_path = path;
+  size_t query_pos = path.find('?');
+  if (query_pos != std::string::npos) {
+    clean_path = path.substr(0, query_pos);
+  }
+
+  if (base::StartsWith(clean_path, "/api/v1/history",
+                       base::CompareCase::SENSITIVE)) {
+    if (history_controller_) {
+      history_controller_->HandleRequest(method, path, body,
+                                         std::move(callback));
+    } else {
+      // History disabled
+      std::move(callback).Run(
+          503, R"({"success":false,"error":"HISTORY_DISABLED"})");
+    }
+    return;
+  }
 
   controller_->HandleRequest(method, path, body, std::move(callback));
 }

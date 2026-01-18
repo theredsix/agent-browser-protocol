@@ -1,20 +1,48 @@
 import("//build/config/features.gni")
+import("//build/config/ui.gni")
 
 source_set("abp") {
   sources = [
+    "abp_config.cc",
+    "abp_config.h",
     "abp_controller.cc",
     "abp_controller.h",
+    "abp_cursor_icons.cc",
+    "abp_cursor_icons.h",
+    "abp_event_observer.cc",
+    "abp_event_observer.h",
+    "abp_history_controller.cc",
+    "abp_history_controller.h",
+    "abp_history_database.cc",
+    "abp_history_database.h",
     "abp_http_server.cc",
     "abp_http_server.h",
+    "abp_mouse_tracker.h",
     "abp_switches.cc",
     "abp_switches.h",
   ]
 
+  if (is_mac) {
+    sources += [ "abp_mouse_tracker_mac.mm" ]
+  } else {
+    sources += [ "abp_mouse_tracker.cc" ]
+  }
+
   deps = [
     "//base",
     "//chrome/browser/ui",
+    "//chrome/common",
+    "//components/version_info",
     "//content/public/browser",
     "//net",
+    "//skia",
+    "//sql",
     "//ui/base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
   ]
+
+  if (use_aura) {
+    deps += [ "//ui/aura" ]
+  }
 }

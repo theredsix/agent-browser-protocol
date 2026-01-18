@@ -9,6 +9,8 @@
 namespace abp {
 
 class AbpController;
+class AbpEventObserver;
+class AbpHistoryController;
 
 // HTTP server for ABP REST API.
 // Created on UI thread, runs server callbacks on IO thread,
@@ -53,6 +55,8 @@ class AbpHttpServer : public net::HttpServer::Delegate {
   const int port_;
   std::unique_ptr<net::HttpServer> server_;  // IO thread only
   std::unique_ptr<AbpController> controller_;  // UI thread only
+  std::unique_ptr<AbpHistoryController> history_controller_;  // UI thread only
+  std::unique_ptr<AbpEventObserver> event_observer_;  // UI thread only
 };
 
 }  // namespace abp

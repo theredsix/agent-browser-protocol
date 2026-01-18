@@ -220,6 +220,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       const gfx::Rect& keyboard_rect) override {}
   void ShowInterestInElement(int) override {}
   bool IsHTMLFormPopup() const override;
+  ui::mojom::CursorType GetLastCursorType() override;
 
   // This only needs to be overridden by RenderWidgetHostViewBase subclasses
   // that handle content embedded within other RenderWidgetHostViews.

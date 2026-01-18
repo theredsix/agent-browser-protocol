@@ -16,6 +16,7 @@
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
+#include "components/input/cursor_manager.h"
 #include "components/input/event_with_latency_info.h"
 #include "components/input/render_widget_host_input_event_router.h"
 #include "components/input/render_widget_host_view_input_observer.h"
@@ -908,6 +909,14 @@ RenderWidgetHostViewBase::GetVirtualKeyboardMode() {
 
 bool RenderWidgetHostViewBase::IsHTMLFormPopup() const {
   return false;
+}
+
+ui::mojom::CursorType RenderWidgetHostViewBase::GetLastCursorType() {
+  input::CursorManager* cursor_mgr = GetCursorManager();
+  if (cursor_mgr) {
+    return cursor_mgr->GetLastSetCursorTypeForTesting();
+  }
+  return ui::mojom::CursorType::kPointer;
 }
 
 void RenderWidgetHostViewBase::OnShowWithPageVisibility(

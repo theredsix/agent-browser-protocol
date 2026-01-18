@@ -448,6 +448,10 @@ CreateWebMouseEvent(const std::string& event_type,
     }
   }
 
+  // Mark as debugger-injected so ABP input-only mode can identify it
+  mouse_event->SetModifiers(mouse_event->GetModifiers() |
+                            blink::WebInputEvent::kFromDebugger);
+
   mouse_event->button = event_button;
   mouse_event->click_count = click_count.value_or(0);
   mouse_event->pointer_type = GetPointerType(pointer_type.value_or(""));
@@ -480,6 +484,8 @@ CreateWebTouchEvents(
   int event_modifiers =
       GetEventModifiers(modifiers.value_or(blink::WebInputEvent::kNoModifiers),
                         false, false, 0, 0);
+  // Mark as debugger-injected so ABP input-only mode can identify it
+  event_modifiers |= blink::WebInputEvent::kFromDebugger;
   base::TimeTicks event_timestamp = GetEventTimeTicks(timestamp);
 
   if ((type == blink::WebInputEvent::Type::kTouchStart ||
@@ -1177,6 +1183,10 @@ void InputHandler::DispatchKeyEvent(
                         auto_repeat.value_or(false), is_keypad.value_or(false),
                         location.value_or(0), 0),
       GetEventTimeTicks(timestamp));
+
+  // Mark as debugger-injected so ABP input-only mode can identify it
+  event.SetModifiers(event.GetModifiers() |
+                     blink::WebInputEvent::kFromDebugger);
 
   if (!SetKeyboardEventText(event.text, std::move(text))) {
     callback->sendFailure(Response::InvalidParams("Invalid 'text' parameter"));
