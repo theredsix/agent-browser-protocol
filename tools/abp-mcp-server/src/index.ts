@@ -52,6 +52,24 @@ async function abpRequest(
 
 // Tool definitions
 const TOOLS: Tool[] = [
+  // Browser Management
+  {
+    name: "browser_get_status",
+    description: "Get browser initialization status. Poll this to wait for ABP to be ready after launch.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "browser_get_info",
+    description: "Get browser version and status information",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+
   // Tab Management
   {
     name: "browser_list_tabs",
@@ -218,6 +236,13 @@ async function handleTool(
   args: Record<string, unknown>
 ): Promise<unknown> {
   switch (name) {
+    // Browser Management
+    case "browser_get_status":
+      return abpRequest("GET", "/api/v1/browser/status");
+
+    case "browser_get_info":
+      return abpRequest("GET", "/api/v1/browser");
+
     // Tab Management
     case "browser_list_tabs":
       return abpRequest("GET", "/api/v1/tabs");
@@ -332,6 +357,12 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
     resources: [
       {
+        uri: "browser://status",
+        name: "Browser Status",
+        description: "Browser initialization and readiness status",
+        mimeType: "application/json",
+      },
+      {
         uri: "browser://tabs",
         name: "Browser Tabs",
         description: "List of all open browser tabs",
@@ -344,6 +375,19 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
 // Read resource
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const { uri } = request.params;
+
+  if (uri === "browser://status") {
+    const status = await abpRequest("GET", "/api/v1/browser/status");
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: "application/json",
+          text: JSON.stringify(status, null, 2),
+        },
+      ],
+    };
+  }
 
   if (uri === "browser://tabs") {
     const tabs = await abpRequest("GET", "/api/v1/tabs");

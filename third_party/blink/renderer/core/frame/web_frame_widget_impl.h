@@ -54,7 +54,9 @@
 #include "third_party/blink/public/mojom/input/input_handler.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/stylus_writing_gesture.mojom-blink.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-blink.h"
+#include "third_party/blink/public/mojom/page/virtual_cursor.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
@@ -115,6 +117,7 @@ class CORE_EXPORT WebFrameWidgetImpl
       public WebFrameWidget,
       public WidgetBaseClient,
       public mojom::blink::FrameWidget,
+      public mojom::blink::VirtualCursor,
       public viz::mojom::blink::InputTargetClient,
       public mojom::blink::FrameWidgetInputHandler,
       public FrameWidget,
@@ -493,6 +496,12 @@ class CORE_EXPORT WebFrameWidgetImpl
       mojom::blink::StylusWritingGestureDataPtr gesture_data,
       HandleStylusWritingGestureActionCallback callback) override;
 
+  // mojom::blink::VirtualCursor overrides:
+  void SetPosition(float x, float y, bool visible) override;
+  void SetCursorType(ui::mojom::CursorType cursor_type) override;
+  void SetVisible(bool visible) override;
+  void SetEnabled(bool enabled) override;
+
   // Sets the display mode, which comes from the top-level browsing context and
   // is applied to all widgets.
   void SetDisplayMode(mojom::blink::DisplayMode);
@@ -506,6 +515,9 @@ class CORE_EXPORT WebFrameWidgetImpl
 
   void BindWidgetCompositor(
       mojo::PendingReceiver<mojom::blink::WidgetCompositor> receiver) override;
+  void BindVirtualCursor(
+      mojo::PendingAssociatedReceiver<mojom::blink::VirtualCursor> receiver)
+      override;
 
   // viz::mojom::blink::InputTargetClient:
   void FrameSinkIdAt(const gfx::PointF& point,
@@ -1293,6 +1305,18 @@ class CORE_EXPORT WebFrameWidgetImpl
   std::optional<float> browser_controls_top_height_override_;
 
   bool throttling_frame_rate_ = false;
+
+  // Virtual cursor support for ABP (Agent Browser Protocol).
+  // Receiver for the VirtualCursor Mojo interface.
+  HeapMojoAssociatedReceiver<mojom::blink::VirtualCursor, WebFrameWidgetImpl>
+      virtual_cursor_receiver_{this, nullptr};
+
+  // Virtual cursor state.
+  float virtual_cursor_x_ = 0;
+  float virtual_cursor_y_ = 0;
+  bool virtual_cursor_visible_ = false;
+  bool virtual_cursor_enabled_ = false;
+  ui::mojom::CursorType virtual_cursor_type_ = ui::mojom::CursorType::kPointer;
 };
 
 }  // namespace blink

@@ -1,12 +1,18 @@
-#include "chrome/browser/abp/abp_cursor_icons.h"
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
-#include "third_party/skia/include/core/SkPaint.h"
+#include "content/renderer/virtual_cursor_layer.h"
+
+#include "cc/paint/display_item_list.h"
+#include "cc/paint/paint_canvas.h"
+#include "cc/paint/paint_flags.h"
+#include "cc/paint/paint_recorder.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
-#include "ui/base/cursor/mojom/cursor_type.mojom.h"
-#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/rect.h"
 
-namespace abp {
+namespace content {
 
 namespace {
 
@@ -149,8 +155,7 @@ SkPath CreateNotAllowedPath(float scale) {
   float center = 12 * scale;
   float outer_radius = 9 * scale;
   float inner_radius = 7 * scale;
-  // Outer circle using addOval equivalent - just draw the ring
-  // Draw a simple ring by creating outer and inner circles
+  // Outer and inner circles for the ring
   builder.addCircle(center, center, outer_radius, SkPathDirection::kCW);
   builder.addCircle(center, center, inner_radius, SkPathDirection::kCCW);
   // Diagonal slash
@@ -220,137 +225,26 @@ SkPath CreateWaitPath(float scale) {
   return builder.detach();
 }
 
-void DrawCursorPath(SkCanvas* canvas,
-                    const SkPath& path,
-                    const gfx::PointF& position,
-                    float scale) {
-  canvas->save();
-  canvas->translate(position.x(), position.y());
-
-  // Draw white outline/stroke for visibility
-  SkPaint stroke_paint;
-  stroke_paint.setColor(SK_ColorWHITE);
-  stroke_paint.setStyle(SkPaint::kStroke_Style);
-  stroke_paint.setStrokeWidth(2.0f * scale);
-  stroke_paint.setAntiAlias(true);
-  canvas->drawPath(path, stroke_paint);
-
-  // Draw black fill
-  SkPaint fill_paint;
-  fill_paint.setColor(SK_ColorBLACK);
-  fill_paint.setStyle(SkPaint::kFill_Style);
-  fill_paint.setAntiAlias(true);
-  canvas->drawPath(path, fill_paint);
-
-  canvas->restore();
-}
-
-}  // namespace
-
-void DrawCursorIcon(SkCanvas* canvas,
-                    ui::mojom::CursorType cursor_type,
-                    const gfx::PointF& position,
-                    float scale) {
-  if (!canvas) {
-    return;
-  }
-
-  // Get the hotspot and adjust position so hotspot is at the click point
-  gfx::PointF hotspot = GetCursorHotspot(cursor_type);
-  gfx::PointF adjusted_pos(position.x() - hotspot.x() * scale,
-                           position.y() - hotspot.y() * scale);
-
-  SkPath path;
-
-  switch (cursor_type) {
-    case ui::mojom::CursorType::kPointer:
-    case ui::mojom::CursorType::kNone:
-      path = CreateArrowPath(scale);
-      break;
-
-    case ui::mojom::CursorType::kHand:
-      path = CreateHandPath(scale);
-      break;
-
-    case ui::mojom::CursorType::kIBeam:
-      path = CreateIBeamPath(scale);
-      break;
-
-    case ui::mojom::CursorType::kCross:
-      path = CreateCrosshairPath(scale);
-      break;
-
-    case ui::mojom::CursorType::kMove:
-    case ui::mojom::CursorType::kMiddlePanning:
-    case ui::mojom::CursorType::kMiddlePanningVertical:
-    case ui::mojom::CursorType::kMiddlePanningHorizontal:
-      path = CreateMovePath(scale);
-      break;
-
-    case ui::mojom::CursorType::kNotAllowed:
-    case ui::mojom::CursorType::kNoDrop:
-      path = CreateNotAllowedPath(scale);
-      break;
-
-    case ui::mojom::CursorType::kNorthResize:
-    case ui::mojom::CursorType::kSouthResize:
-    case ui::mojom::CursorType::kNorthSouthResize:
-    case ui::mojom::CursorType::kRowResize:
-      path = CreateNsResizePath(scale);
-      break;
-
-    case ui::mojom::CursorType::kEastResize:
-    case ui::mojom::CursorType::kWestResize:
-    case ui::mojom::CursorType::kEastWestResize:
-    case ui::mojom::CursorType::kColumnResize:
-      path = CreateEwResizePath(scale);
-      break;
-
-    case ui::mojom::CursorType::kWait:
-    case ui::mojom::CursorType::kProgress:
-      path = CreateWaitPath(scale);
-      break;
-
-    // For other cursor types, fall back to arrow
-    default:
-      path = CreateArrowPath(scale);
-      break;
-  }
-
-  DrawCursorPath(canvas, path, adjusted_pos, scale);
-}
-
+// Get the hotspot offset for a cursor type
 gfx::PointF GetCursorHotspot(ui::mojom::CursorType cursor_type) {
   switch (cursor_type) {
     case ui::mojom::CursorType::kPointer:
     case ui::mojom::CursorType::kNone:
-      // Arrow tip is at top-left
       return gfx::PointF(1.0f, 1.0f);
 
     case ui::mojom::CursorType::kHand:
-      // Fingertip is at top of index finger
       return gfx::PointF(8.0f, 1.0f);
 
     case ui::mojom::CursorType::kIBeam:
-      // Center of I-beam
       return gfx::PointF(8.0f, 12.0f);
 
     case ui::mojom::CursorType::kCross:
-      // Center of crosshair
-      return gfx::PointF(12.0f, 12.0f);
-
     case ui::mojom::CursorType::kMove:
     case ui::mojom::CursorType::kMiddlePanning:
     case ui::mojom::CursorType::kMiddlePanningVertical:
     case ui::mojom::CursorType::kMiddlePanningHorizontal:
-      // Center of four-way arrows
-      return gfx::PointF(12.0f, 12.0f);
-
     case ui::mojom::CursorType::kNotAllowed:
     case ui::mojom::CursorType::kNoDrop:
-      // Center of circle
-      return gfx::PointF(12.0f, 12.0f);
-
     case ui::mojom::CursorType::kNorthResize:
     case ui::mojom::CursorType::kSouthResize:
     case ui::mojom::CursorType::kNorthSouthResize:
@@ -359,18 +253,161 @@ gfx::PointF GetCursorHotspot(ui::mojom::CursorType cursor_type) {
     case ui::mojom::CursorType::kWestResize:
     case ui::mojom::CursorType::kEastWestResize:
     case ui::mojom::CursorType::kColumnResize:
-      // Center of resize arrows
-      return gfx::PointF(12.0f, 12.0f);
-
+    case ui::mojom::CursorType::kNorthEastResize:
+    case ui::mojom::CursorType::kNorthWestResize:
+    case ui::mojom::CursorType::kSouthEastResize:
+    case ui::mojom::CursorType::kSouthWestResize:
+    case ui::mojom::CursorType::kNorthEastSouthWestResize:
+    case ui::mojom::CursorType::kNorthWestSouthEastResize:
     case ui::mojom::CursorType::kWait:
     case ui::mojom::CursorType::kProgress:
-      // Center of hourglass
       return gfx::PointF(12.0f, 12.0f);
 
     default:
-      // Default to arrow hotspot
       return gfx::PointF(1.0f, 1.0f);
   }
 }
 
-}  // namespace abp
+void DrawCursorPath(cc::PaintCanvas* canvas,
+                    const SkPath& path,
+                    float scale) {
+  // Draw white outline/stroke for visibility
+  cc::PaintFlags stroke_flags;
+  stroke_flags.setColor(SK_ColorWHITE);
+  stroke_flags.setStyle(cc::PaintFlags::kStroke_Style);
+  stroke_flags.setStrokeWidth(2.0f * scale);
+  stroke_flags.setAntiAlias(true);
+  canvas->drawPath(path, stroke_flags);
+
+  // Draw black fill
+  cc::PaintFlags fill_flags;
+  fill_flags.setColor(SK_ColorBLACK);
+  fill_flags.setStyle(cc::PaintFlags::kFill_Style);
+  fill_flags.setAntiAlias(true);
+  canvas->drawPath(path, fill_flags);
+}
+
+}  // namespace
+
+VirtualCursorLayer::VirtualCursorLayer() : PictureLayer(this) {
+  SetIsDrawable(true);
+  SetHitTestable(false);
+  // Set the bounds to the cursor size
+  SetBounds(gfx::Size(kCursorSize, kCursorSize));
+}
+
+VirtualCursorLayer::~VirtualCursorLayer() = default;
+
+void VirtualCursorLayer::SetPosition(float x, float y) {
+  position_ = gfx::PointF(x, y);
+
+  // Get the hotspot offset for the current cursor type
+  gfx::PointF hotspot = GetCursorHotspot(cursor_type_);
+
+  // Use transform for positioning (efficient, no repaint needed)
+  gfx::Transform transform;
+  transform.Translate(x - hotspot.x() * scale_, y - hotspot.y() * scale_);
+  SetTransform(transform);
+}
+
+void VirtualCursorLayer::SetCursorType(ui::mojom::CursorType cursor_type) {
+  if (cursor_type_ == cursor_type) {
+    return;
+  }
+
+  cursor_type_ = cursor_type;
+
+  // Update the position to account for new hotspot
+  SetPosition(position_.x(), position_.y());
+
+  // Request a repaint since the cursor shape changed
+  SetNeedsDisplay();
+}
+
+void VirtualCursorLayer::SetCursorVisible(bool visible) {
+  if (visible_ == visible) {
+    return;
+  }
+
+  visible_ = visible;
+  SetHideLayerAndSubtree(!visible);
+}
+
+scoped_refptr<cc::DisplayItemList> VirtualCursorLayer::PaintContentsToDisplayList() {
+  auto display_list = base::MakeRefCounted<cc::DisplayItemList>();
+
+  display_list->StartPaint();
+
+  cc::PaintRecorder recorder;
+  cc::PaintCanvas* canvas = recorder.beginRecording();
+
+  SkPath path;
+
+  switch (cursor_type_) {
+    case ui::mojom::CursorType::kPointer:
+    case ui::mojom::CursorType::kNone:
+      path = CreateArrowPath(scale_);
+      break;
+
+    case ui::mojom::CursorType::kHand:
+      path = CreateHandPath(scale_);
+      break;
+
+    case ui::mojom::CursorType::kIBeam:
+      path = CreateIBeamPath(scale_);
+      break;
+
+    case ui::mojom::CursorType::kCross:
+      path = CreateCrosshairPath(scale_);
+      break;
+
+    case ui::mojom::CursorType::kMove:
+    case ui::mojom::CursorType::kMiddlePanning:
+    case ui::mojom::CursorType::kMiddlePanningVertical:
+    case ui::mojom::CursorType::kMiddlePanningHorizontal:
+      path = CreateMovePath(scale_);
+      break;
+
+    case ui::mojom::CursorType::kNotAllowed:
+    case ui::mojom::CursorType::kNoDrop:
+      path = CreateNotAllowedPath(scale_);
+      break;
+
+    case ui::mojom::CursorType::kNorthResize:
+    case ui::mojom::CursorType::kSouthResize:
+    case ui::mojom::CursorType::kNorthSouthResize:
+    case ui::mojom::CursorType::kRowResize:
+      path = CreateNsResizePath(scale_);
+      break;
+
+    case ui::mojom::CursorType::kEastResize:
+    case ui::mojom::CursorType::kWestResize:
+    case ui::mojom::CursorType::kEastWestResize:
+    case ui::mojom::CursorType::kColumnResize:
+      path = CreateEwResizePath(scale_);
+      break;
+
+    case ui::mojom::CursorType::kWait:
+    case ui::mojom::CursorType::kProgress:
+      path = CreateWaitPath(scale_);
+      break;
+
+    default:
+      path = CreateArrowPath(scale_);
+      break;
+  }
+
+  DrawCursorPath(canvas, path, scale_);
+
+  display_list->push<cc::DrawRecordOp>(recorder.finishRecordingAsPicture());
+  display_list->EndPaintOfUnpaired(gfx::Rect(kCursorSize, kCursorSize));
+  display_list->Finalize();
+
+  return display_list;
+}
+
+bool VirtualCursorLayer::FillsBoundsCompletely() const {
+  return false;
+}
+
+}  // namespace content

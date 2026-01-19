@@ -76,6 +76,7 @@ class WebPointerEvent;
 
 class InspectorOverlayAgent;
 class PersistentTool;
+class VirtualCursorTool;
 
 using OverlayFrontend = protocol::Overlay::Metainfo::FrontendClass;
 
@@ -261,6 +262,10 @@ class CORE_EXPORT InspectorOverlayAgent final
       std::unique_ptr<
           protocol::Array<protocol::Overlay::IsolatedElementHighlightConfig>>
           isolated_element_highlight_configs) override;
+  protocol::Response setVirtualCursor(
+      std::unique_ptr<protocol::Overlay::VirtualCursorConfig> cursor_config,
+      std::optional<String>* detected_cursor_style,
+      std::optional<bool>* is_custom_cursor) override;
 
   // InspectorBaseAgent overrides.
   void Restore() override;
@@ -312,7 +317,15 @@ class CORE_EXPORT InspectorOverlayAgent final
 
   protocol::Response CompositingEnabled();
 
-  bool IsVisible() const { return inspect_tool_ || hinge_; }
+  bool IsVisible() const;
+
+  // Get the virtual cursor tool for drawing (may be null)
+  VirtualCursorTool* GetVirtualCursorTool() const {
+    return virtual_cursor_tool_.Get();
+  }
+
+  // Check if the overlay page has been loaded (for JS-based tools)
+  bool HasOverlayPage() const { return !!overlay_page_; }
   bool InSomeInspectMode();
   void SetNeedsUnbufferedInput(bool unbuffered);
   void PickTheRightTool();
@@ -342,6 +355,7 @@ class CORE_EXPORT InspectorOverlayAgent final
   Member<FrameOverlay> frame_overlay_;
   Member<InspectTool> inspect_tool_;
   Member<PersistentTool> persistent_tool_;
+  Member<VirtualCursorTool> virtual_cursor_tool_;
   Member<Hinge> hinge_;
   // The agent needs to keep AXContext because it enables caching of
   // a11y attributes shown in the inspector overlay.

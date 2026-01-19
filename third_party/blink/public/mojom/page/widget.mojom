@@ -16,6 +16,7 @@ import "third_party/blink/public/mojom/drag/drag.mojom";
 import "third_party/blink/public/mojom/widget/platform_widget.mojom";
 import "third_party/blink/public/mojom/widget/device_emulation_params.mojom";
 import "third_party/blink/public/mojom/widget/visual_properties.mojom";
+import "third_party/blink/public/mojom/page/virtual_cursor.mojom";
 import "ui/base/dragdrop/mojom/drag_drop_types.mojom";
 import "ui/base/mojom/ui_base_types.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
@@ -179,6 +180,10 @@ interface FrameWidget {
 
   // Binds an WidgetCompositor interface.
   BindWidgetCompositor(pending_receiver<WidgetCompositor> host);
+
+  // Binds a VirtualCursor interface for ABP (Agent Browser Protocol).
+  // Used by AI agents to control a virtual cursor in the renderer's compositor.
+  BindVirtualCursor(pending_associated_receiver<VirtualCursor> receiver);
 
   // Sent by a parent frame to notify its child about the state of the child's
   // intersection with the parent's viewport, primarily for use by the

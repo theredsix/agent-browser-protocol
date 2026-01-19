@@ -2102,6 +2102,53 @@ void RenderWidgetHostImpl::InsertVisualStateCallback(
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(callback), false)));
 }
 
+void RenderWidgetHostImpl::SetVirtualCursorPosition(float x,
+                                                     float y,
+                                                     bool visible) {
+  if (!virtual_cursor_remote_.is_bound()) {
+    if (!blink_frame_widget_) {
+      return;
+    }
+    blink_frame_widget_->BindVirtualCursor(
+        virtual_cursor_remote_.BindNewEndpointAndPassReceiver());
+  }
+  virtual_cursor_remote_->SetPosition(x, y, visible);
+}
+
+void RenderWidgetHostImpl::SetVirtualCursorType(
+    ui::mojom::CursorType cursor_type) {
+  if (!virtual_cursor_remote_.is_bound()) {
+    if (!blink_frame_widget_) {
+      return;
+    }
+    blink_frame_widget_->BindVirtualCursor(
+        virtual_cursor_remote_.BindNewEndpointAndPassReceiver());
+  }
+  virtual_cursor_remote_->SetCursorType(cursor_type);
+}
+
+void RenderWidgetHostImpl::SetVirtualCursorVisible(bool visible) {
+  if (!virtual_cursor_remote_.is_bound()) {
+    if (!blink_frame_widget_) {
+      return;
+    }
+    blink_frame_widget_->BindVirtualCursor(
+        virtual_cursor_remote_.BindNewEndpointAndPassReceiver());
+  }
+  virtual_cursor_remote_->SetVisible(visible);
+}
+
+void RenderWidgetHostImpl::SetVirtualCursorEnabled(bool enabled) {
+  if (!virtual_cursor_remote_.is_bound()) {
+    if (!blink_frame_widget_) {
+      return;
+    }
+    blink_frame_widget_->BindVirtualCursor(
+        virtual_cursor_remote_.BindNewEndpointAndPassReceiver());
+  }
+  virtual_cursor_remote_->SetEnabled(enabled);
+}
+
 RenderProcessHostPriorityClient::Priority RenderWidgetHostImpl::GetPriority() {
   RenderProcessHostPriorityClient::Priority priority = {
       is_hidden_,  frame_depth_, intersects_viewport_, is_discarding_,
@@ -3181,6 +3228,12 @@ void RenderWidgetHostImpl::OnUnconfirmedTapConvertedToTap() {
   }
 }
 
+void RenderWidgetHostImpl::OnVirtualCursorMoved(float x, float y) {
+  // ABP: Update the virtual cursor position in the compositor layer.
+  // This is called by RenderInputRouter when mouse events are intercepted.
+  SetVirtualCursorPosition(x, y, /*visible=*/true);
+}
+
 void RenderWidgetHostImpl::UpdateElementFocusForStylusWriting(
 #if BUILDFLAG(IS_WIN)
     const gfx::Rect& focus_widget_rect_in_dips
@@ -3791,6 +3844,15 @@ void RenderWidgetHostImpl::SetupRenderInputRouter() {
   render_input_router_ = std::make_unique<input::RenderInputRouter>(
       this, MakeFlingScheduler(), this,
       GetUIThreadTaskRunner({BrowserTaskType::kUserInput}));
+
+  // ABP: Set up virtual cursor tracking flags from command line
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch("enable-abp")) {
+    render_input_router_->SetAbpEnabled(true);
+    render_input_router_->SetAllowSystemInputs(
+        command_line->HasSwitch("allow-system-inputs"));
+  }
+
   SetupInputRouter();
 }
 

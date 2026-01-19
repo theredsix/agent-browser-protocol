@@ -63,6 +63,12 @@ class COMPONENT_EXPORT(INPUT) RenderInputRouter
   void BindRenderInputRouterInterfaces(
       mojo::PendingRemote<blink::mojom::RenderInputRouterClient> remote);
 
+  // Sets whether ABP virtual cursor tracking is enabled.
+  void SetAbpEnabled(bool enabled) { abp_enabled_ = enabled; }
+
+  // Sets whether system mouse inputs should be tracked (--allow-system-inputs).
+  void SetAllowSystemInputs(bool allow) { allow_system_inputs_ = allow; }
+
   void RendererWidgetCreated(bool for_frame_widget, bool is_in_viz);
 
   InputRouter* input_router() { return input_router_.get(); }
@@ -295,6 +301,10 @@ class COMPONENT_EXPORT(INPUT) RenderInputRouter
   bool force_enable_zoom_ = false;
 
   base::WeakPtr<RenderWidgetHostViewInput> view_input_;
+
+  // ABP virtual cursor tracking flags
+  bool abp_enabled_ = false;
+  bool allow_system_inputs_ = false;
 
   base::WeakPtrFactory<RenderInputRouter> weak_factory_{this};
 };

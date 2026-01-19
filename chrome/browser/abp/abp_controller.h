@@ -12,6 +12,7 @@
 #include "base/values.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-forward.h"
@@ -92,6 +93,7 @@ class AbpController {
     int quality = 80;                // 1-100 for jpeg/webp
     std::string markup = "none";     // none, interactive, clickable, typeable, inputs
     std::string mouse = "normal";    // normal, none, large
+    bool cursor = true;              // Include virtual cursor in screenshot
   };
 
   // Set the history controller for action recording
@@ -106,6 +108,13 @@ class AbpController {
   // Center the mouse cursor in the active tab's viewport
   // Used for ABP input-only mode initialization
   void CenterMouseInActiveTab();
+
+  // Check if browser is ready for ABP operations
+  // Returns true if there's a browser window with a tab that has a valid view
+  bool IsBrowserReady();
+
+  // Get browser status for /api/v1/browser/status endpoint
+  void GetBrowserStatus(ResponseCallback callback);
 
   // Helpers (public for use in lambdas)
   content::WebContents* FindWebContents(const std::string& tab_id);
@@ -188,6 +197,20 @@ class AbpController {
                         const ScreenshotOptions& options,
                         bool success,
                         const std::string& result);
+  void OnCursorSetForScreenshot(const std::string& tab_id,
+                                base::Value::Dict params,
+                                ResponseCallback callback,
+                                const ScreenshotOptions& options,
+                                content::WebContents* wc,
+                                bool success,
+                                const std::string& result);
+  void CaptureScreenshotWithCursor(const std::string& tab_id,
+                                   ResponseCallback callback,
+                                   const ScreenshotOptions& options);
+  void OnCursorScreenshotCaptured(const std::string& tab_id,
+                                  ResponseCallback callback,
+                                  const ScreenshotOptions& options,
+                                  const content::CopyFromSurfaceResult& result);
   void OnExecuteScriptResult(ResponseCallback callback,
                              bool success,
                              const std::string& result);
@@ -225,31 +248,24 @@ class AbpController {
                              std::string screenshot_after_path);
 
   // Take screenshot for history (before or after action)
-  // cursor_x/cursor_y: optional cursor position (-1 to use last known position)
   // Uses direct C++ capture with CopyFromSurface
+  // Note: Cursor is rendered by virtual cursor overlay and captured automatically
   void CaptureScreenshotForHistory(
       const std::string& tab_id,
       int64_t timestamp,
       bool is_before,
-      base::OnceCallback<void(std::string path)> callback,
-      double cursor_x = -1,
-      double cursor_y = -1);
+      base::OnceCallback<void(std::string path)> callback);
 
   // Direct screenshot capture using CopyFromSurface (no CDP/JS injection)
+  // Note: Cursor is rendered by virtual cursor overlay and captured automatically
   void CaptureScreenshotDirect(
       content::WebContents* web_contents,
       const base::FilePath& screenshot_path,
-      double cursor_x,
-      double cursor_y,
       base::OnceCallback<void(std::string path)> callback);
 
   // Callback when surface copy completes
   void OnSurfaceCopied(
       const base::FilePath& screenshot_path,
-      double cursor_x,
-      double cursor_y,
-      ui::mojom::CursorType cursor_type,
-      float device_scale_factor,
       base::OnceCallback<void(std::string path)> callback,
       const content::CopyFromSurfaceResult& result);
 
@@ -277,6 +293,31 @@ class AbpController {
 
   // CDP clients per WebContents (keyed by DevToolsAgentHost ID)
   std::map<std::string, std::unique_ptr<AbpCdpClient>> cdp_clients_;
+
+  // Sets the virtual cursor position via Mojo IPC to the renderer.
+  // This is the primary path for cursor rendering in the compositor layer.
+  void SetVirtualCursorViaMojo(content::WebContents* wc,
+                                float x,
+                                float y,
+                                bool visible);
+
+  // Sets the virtual cursor type via Mojo IPC.
+  void SetVirtualCursorTypeViaMojo(content::WebContents* wc,
+                                    ui::mojom::CursorType cursor_type);
+
+  // Enables/disables the virtual cursor system for a tab.
+  void SetVirtualCursorEnabledViaMojo(content::WebContents* wc, bool enabled);
+
+  // Virtual cursor state per tab (keyed by DevToolsAgentHost ID)
+  // When a virtual cursor is active via CDP overlay, we track it here
+  // so screenshots don't double-draw the cursor
+  struct VirtualCursorState {
+    bool active = false;
+    double x = 0;
+    double y = 0;
+    ui::mojom::CursorType cursor_type = ui::mojom::CursorType::kPointer;
+  };
+  std::map<std::string, VirtualCursorState> virtual_cursor_states_;
 
   // History controller (not owned)
   raw_ptr<AbpHistoryController> history_controller_ = nullptr;

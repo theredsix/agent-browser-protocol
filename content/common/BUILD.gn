@@ -590,6 +590,7 @@ mojom("mojo_bindings") {
     "//third_party/blink/public/mojom:web_feature_mojo_bindings",
     "//ui/accessibility:ax_enums_mojo",
     "//ui/accessibility/mojom",
+    "//ui/base/cursor/mojom:cursor_type",
     "//ui/base/ime/mojom",
     "//ui/base/mojom",
     "//ui/display/mojom",

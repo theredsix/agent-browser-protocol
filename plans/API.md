@@ -30,7 +30,7 @@ All action endpoints (POST/DELETE that modify state) accept standard parameters:
   "screenshot": {
     "area": "viewport",
     "markup": "interactive",
-    "mouse": "normal"
+    "cursor": true
   }
 }
 ```
@@ -64,17 +64,16 @@ Bounding boxes drawn over elements to help identify interactive targets:
 - Element index labels are drawn for reference
 - Boxes are semi-transparent to not obscure content
 
-#### Screenshot Mouse
+#### Screenshot Cursor
 
-Control mouse cursor visibility and size in screenshots:
+Control virtual cursor visibility in screenshots. The virtual cursor is automatically positioned by input actions (click, scroll, move) and rendered at the compositor layer.
 
 | Value | Description |
 |-------|-------------|
-| `normal` | Show normal mouse cursor (default) |
-| `none` | Hide mouse cursor |
-| `large` | Show mouse cursor at 2x size (for visibility) |
+| `true` | Include virtual cursor in screenshot (default) |
+| `false` | Hide virtual cursor for screenshot capture |
 
-**Example request with markup and large cursor:**
+**Example request with markup and cursor:**
 ```json
 {
   "x": 100,
@@ -83,7 +82,7 @@ Control mouse cursor visibility and size in screenshots:
   "screenshot": {
     "area": "viewport",
     "markup": "interactive",
-    "mouse": "large"
+    "cursor": true
   }
 }
 ```
@@ -450,7 +449,7 @@ Control screenshot capture via the `screenshot` object in the request body:
   "screenshot": {
     "area": "viewport",
     "markup": "interactive",
-    "mouse": "normal"
+    "cursor": true
   }
 }
 ```
@@ -459,7 +458,7 @@ Control screenshot capture via the `screenshot` object in the request body:
 |-------|------|---------|-------------|
 | `area` | string | `viewport` | Capture area: `none`, `viewport` |
 | `markup` | string | `none` | Element markup: `none`, `interactive`, `clickable`, `typeable`, `inputs` |
-| `mouse` | string | `normal` | Cursor visibility: `normal`, `none`, `large` (2x size) |
+| `cursor` | boolean | `true` | Include virtual cursor in screenshot |
 
 **Format:** All screenshots are returned as WebP at quality 80. This is not configurable to ensure consistent bandwidth usage and simplify caching.
 
@@ -524,6 +523,91 @@ Returns browser version and status information.
     "uptime_ms": 34521
   }
 }
+```
+
+### Get Browser Status
+
+```
+GET /browser/status
+```
+
+Returns initialization status. Poll this endpoint to wait for ABP to be ready after browser launch.
+
+**Response (initializing):**
+```json
+{
+  "success": true,
+  "data": {
+    "ready": false,
+    "state": "initializing",
+    "components": {
+      "http_server": true,
+      "browser_window": false,
+      "devtools": false
+    },
+    "message": "Waiting for browser window"
+  }
+}
+```
+
+**Response (ready):**
+```json
+{
+  "success": true,
+  "data": {
+    "ready": true,
+    "state": "ready",
+    "components": {
+      "http_server": true,
+      "browser_window": true,
+      "devtools": true
+    },
+    "uptime_ms": 1234
+  }
+}
+```
+
+**Response (error):**
+```json
+{
+  "success": true,
+  "data": {
+    "ready": false,
+    "state": "error",
+    "components": {
+      "http_server": true,
+      "browser_window": true,
+      "devtools": false
+    },
+    "message": "DevTools connection failed",
+    "error_code": "DEVTOOLS_INIT_FAILED"
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ready` | boolean | `true` when ABP is fully initialized and ready to accept commands |
+| `state` | string | Current state: `initializing`, `ready`, `error` |
+| `components.http_server` | boolean | HTTP server is listening |
+| `components.browser_window` | boolean | Browser window is created and active |
+| `components.devtools` | boolean | DevTools connection is established |
+| `message` | string | Human-readable status message (present when not ready) |
+| `error_code` | string | Error code (present when state is `error`) |
+| `uptime_ms` | number | Milliseconds since ABP became ready (present when ready) |
+
+**Polling example:**
+```bash
+# Wait for browser to be ready (bash)
+while true; do
+  response=$(curl -s http://localhost:8222/api/v1/browser/status)
+  ready=$(echo "$response" | jq -r '.data.ready')
+  if [ "$ready" = "true" ]; then
+    echo "Browser ready"
+    break
+  fi
+  sleep 0.5
+done
 ```
 
 ### Shutdown Browser
@@ -1336,7 +1420,7 @@ Capture a screenshot after waiting for a condition. Follows the standard action 
   "screenshot": {
     "area": "viewport",
     "markup": "interactive",
-    "mouse": "normal"
+    "cursor": true
   },
   "full_page": false
 }
@@ -1345,7 +1429,7 @@ Capture a screenshot after waiting for a condition. Follows the standard action 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `wait_until` | object | `{"type": "action_complete"}` | Wait condition before capture |
-| `screenshot` | object | See below | Screenshot options (area, markup, mouse) |
+| `screenshot` | object | See below | Screenshot options (area, markup, cursor) |
 | `full_page` | boolean | `false` | Capture full scrollable page |
 
 **Response (standard action envelope):**
@@ -1885,3 +1969,6 @@ When `auto_select` is `true`, file choosers will automatically use the configure
 | `EVALUATION_ERROR` | JavaScript evaluation failed |
 | `UNAUTHORIZED` | Missing or invalid auth token |
 | `RATE_LIMITED` | Too many requests |
+| `NOT_READY` | ABP is still initializing, poll /browser/status |
+| `BROWSER_INIT_FAILED` | Browser window failed to initialize |
+| `DEVTOOLS_INIT_FAILED` | DevTools connection failed to establish |

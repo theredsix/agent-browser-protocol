@@ -244,6 +244,11 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
 
   static bool UsesHandCursor(const Node*);
 
+  // Returns the cursor for the given hit test location and result.
+  // Used by inspector tools to determine cursor style at a position.
+  std::optional<ui::Cursor> CursorForHitTest(const HitTestLocation& location,
+                                             const HitTestResult& result);
+
   void NotifyElementActivated();
 
   SelectionController& GetSelectionController() const {

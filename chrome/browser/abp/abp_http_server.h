@@ -52,7 +52,11 @@ class AbpHttpServer : public net::HttpServer::Delegate {
                        int status_code,
                        std::string body);
 
+  // Poll for browser readiness and center cursor when ready
+  void PollForReadyAndCenterCursor();
+
   const int port_;
+  bool cursor_centered_ = false;  // Track whether initial cursor centering is done
   std::unique_ptr<net::HttpServer> server_;  // IO thread only
   std::unique_ptr<AbpController> controller_;  // UI thread only
   std::unique_ptr<AbpHistoryController> history_controller_;  // UI thread only

@@ -569,6 +569,12 @@ bool EventHandler::ShouldShowIBeamForNode(const Node* node,
   return IsEditable(*node);
 }
 
+std::optional<ui::Cursor> EventHandler::CursorForHitTest(
+    const HitTestLocation& location,
+    const HitTestResult& result) {
+  return SelectCursor(location, result);
+}
+
 std::optional<ui::Cursor> EventHandler::SelectCursor(
     const HitTestLocation& location,
     const HitTestResult& result) {

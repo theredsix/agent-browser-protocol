@@ -496,3 +496,26 @@ experimental domain Overlay
 
   # Fired when user cancels the inspect mode.
   event inspectModeCanceled
+
+  # Configuration for virtual cursor overlay
+  type VirtualCursorConfig extends object
+    properties
+      # X coordinate of the cursor in CSS pixels (viewport-relative)
+      number x
+      # Y coordinate of the cursor in CSS pixels (viewport-relative)
+      number y
+      # Whether the cursor is visible (default: true)
+      optional boolean visible
+
+  # Sets or updates a virtual cursor overlay at the specified position.
+  # The cursor style is automatically detected based on hit-testing the element
+  # at the cursor position and checking CSS cursor properties.
+  experimental command setVirtualCursor
+    parameters
+      # The cursor configuration. Pass null to hide the virtual cursor.
+      optional VirtualCursorConfig cursorConfig
+    returns
+      # The detected cursor style (e.g., "pointer", "hand", "text", "wait")
+      optional string detectedCursorStyle
+      # True if the detected cursor is a custom cursor image
+      optional boolean isCustomCursor

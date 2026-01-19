@@ -35,6 +35,7 @@
 #include "build/build_config.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer.h"
+#include "cc/paint/paint_recorder.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -68,8 +69,10 @@
 #include "third_party/blink/renderer/core/inspector/inspect_tools.h"
 #include "third_party/blink/renderer/core/inspector/inspected_frames.h"
 #include "third_party/blink/renderer/core/inspector/inspector_css_agent.h"
+#include "third_party/blink/renderer/core/inspector/inspector_cursor_drawer.h"
 #include "third_party/blink/renderer/core/inspector/inspector_dom_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_overlay_host.h"
+#include "third_party/blink/renderer/core/inspector/virtual_cursor_tool.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
@@ -340,8 +343,32 @@ class InspectorOverlayAgent::InspectorPageOverlayDelegate final
   scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList() override {
     auto display_list = base::MakeRefCounted<cc::DisplayItemList>();
     display_list->StartPaint();
-    display_list->push<cc::DrawRecordOp>(
-        overlay_->OverlayMainFrame()->View()->GetPaintRecord());
+
+    // Draw the overlay page content (JavaScript-based tools) if available
+    if (overlay_->HasOverlayPage()) {
+      display_list->push<cc::DrawRecordOp>(
+          overlay_->OverlayMainFrame()->View()->GetPaintRecord());
+    }
+
+    // Draw the virtual cursor if visible (native drawing)
+    // This works independently of the JS overlay page
+    VirtualCursorTool* cursor_tool = overlay_->GetVirtualCursorTool();
+    if (cursor_tool && cursor_tool->IsVisible()) {
+      cc::PaintRecorder recorder;
+      gfx::Rect bounds(layer_->bounds());
+      cc::PaintCanvas* canvas = recorder.beginRecording();
+
+      // Draw cursor at its position
+      // Use scale of 1.0 since the overlay handles scaling
+      InspectorCursorDrawer::DrawCursor(
+          canvas,
+          cursor_tool->GetDetectedCursorType(),
+          cursor_tool->GetPosition(),
+          1.0f);
+
+      display_list->push<cc::DrawRecordOp>(recorder.finishRecordingAsPicture());
+    }
+
     display_list->EndPaintOfUnpaired(gfx::Rect(layer_->bounds()));
     display_list->Finalize();
     return display_list;
@@ -443,6 +470,7 @@ void InspectorOverlayAgent::Trace(Visitor* visitor) const {
   visitor->Trace(frame_overlay_);
   visitor->Trace(inspect_tool_);
   visitor->Trace(persistent_tool_);
+  visitor->Trace(virtual_cursor_tool_);
   visitor->Trace(hinge_);
   visitor->Trace(document_to_ax_context_);
   InspectorBaseAgent::Trace(visitor);
@@ -948,6 +976,59 @@ protocol::Response InspectorOverlayAgent::setShowIsolatedElements(
   return protocol::Response::Success();
 }
 
+protocol::Response InspectorOverlayAgent::setVirtualCursor(
+    std::unique_ptr<protocol::Overlay::VirtualCursorConfig> cursor_config,
+    std::optional<String>* detected_cursor_style,
+    std::optional<bool>* is_custom_cursor) {
+  // Hide the virtual cursor when called without a configuration
+  if (!cursor_config) {
+    bool was_visible = virtual_cursor_tool_ && virtual_cursor_tool_->IsVisible();
+    virtual_cursor_tool_ = nullptr;
+    *detected_cursor_style = std::nullopt;
+    *is_custom_cursor = std::nullopt;
+    // Disable overlay if cursor was the only visible element
+    if (was_visible && !IsVisible()) {
+      DisableFrameOverlay();
+    }
+    return protocol::Response::Success();
+  }
+
+  // Create or update the virtual cursor tool
+  if (!virtual_cursor_tool_) {
+    virtual_cursor_tool_ =
+        MakeGarbageCollected<VirtualCursorTool>(this, GetFrontend());
+  }
+
+  // Set position and visibility
+  float x = static_cast<float>(cursor_config->getX());
+  float y = static_cast<float>(cursor_config->getY());
+  bool visible = cursor_config->getVisible(true);
+
+  virtual_cursor_tool_->SetPosition(x, y);
+  virtual_cursor_tool_->SetVisible(visible);
+
+  // Detect cursor style at position
+  virtual_cursor_tool_->DetectCursorStyle();
+
+  // Return the detected cursor style
+  *detected_cursor_style =
+      InspectorCursorDrawer::CursorTypeName(
+          virtual_cursor_tool_->GetDetectedCursorType());
+  *is_custom_cursor = virtual_cursor_tool_->IsCustomCursor();
+
+  // Enable the frame overlay for cursor rendering
+  // The cursor is drawn natively in PaintContentsToDisplayList(),
+  // without requiring the JavaScript overlay page.
+  if (visible) {
+    EnsureEnableFrameOverlay();
+    ScheduleUpdate();
+  } else if (!IsVisible()) {
+    DisableFrameOverlay();
+  }
+
+  return protocol::Response::Success();
+}
+
 protocol::Response InspectorOverlayAgent::highlightSourceOrder(
     std::unique_ptr<protocol::Overlay::SourceOrderConfig>
         source_order_inspector_object,
@@ -1219,14 +1300,29 @@ void InspectorOverlayAgent::ScheduleUpdate() {
   }
 }
 
-void InspectorOverlayAgent::PaintOverlayPage() {
-  DCHECK(overlay_page_);
+bool InspectorOverlayAgent::IsVisible() const {
+  return inspect_tool_ || hinge_ ||
+         (virtual_cursor_tool_ && virtual_cursor_tool_->IsVisible());
+}
 
+void InspectorOverlayAgent::PaintOverlayPage() {
   LocalFrameView* view = frame_impl_->GetFrameView();
   LocalFrame* frame = GetFrame();
   if (!view || !frame) {
     return;
   }
+
+  // Check if we have JS-based tools that need the overlay JavaScript
+  bool has_js_tools = inspect_tool_ || hinge_;
+
+  // If we only have the virtual cursor (no JS tools), we don't need
+  // the overlay page at all - the cursor is drawn natively.
+  if (!has_js_tools) {
+    // Virtual cursor is drawn in PaintContentsToDisplayList()
+    return;
+  }
+
+  DCHECK(overlay_page_);
 
   LocalFrame* overlay_frame = OverlayMainFrame();
   blink::VisualViewport& visual_viewport =
@@ -1257,6 +1353,9 @@ void InspectorOverlayAgent::PaintOverlayPage() {
   if (hinge_) {
     hinge_->Draw(scale);
   }
+
+  // Note: Virtual cursor is drawn natively in PaintContentsToDisplayList()
+  // so no JavaScript call is needed here.
 
   EvaluateInOverlay("drawingFinished", "");
 

@@ -91,16 +91,38 @@ void AbpHttpServer::Start() {
       FROM_HERE,
       base::BindOnce(&AbpHttpServer::StartOnIO, base::Unretained(this)));
 
-  // If ABP input-only mode is enabled, center the mouse cursor after a delay
-  // to ensure the browser window is fully ready
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAbpInputOnly)) {
-    LOG(INFO) << "ABP: Input-only mode enabled, will center mouse on startup";
+  // When ABP is enabled and system inputs are blocked (the default),
+  // poll for browser readiness and center the mouse cursor when ready
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAllowSystemInputs)) {
+    LOG(INFO) << "ABP: System inputs blocked, will center mouse when ready";
+    // Start polling after a short initial delay
     content::GetUIThreadTaskRunner({})->PostDelayedTask(
         FROM_HERE,
-        base::BindOnce(&AbpController::CenterMouseInActiveTab,
-                       base::Unretained(controller_.get())),
-        base::Seconds(2));
+        base::BindOnce(&AbpHttpServer::PollForReadyAndCenterCursor,
+                       base::Unretained(this)),
+        base::Milliseconds(100));
+  }
+}
+
+void AbpHttpServer::PollForReadyAndCenterCursor() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (cursor_centered_) {
+    return;  // Already centered
+  }
+
+  if (controller_->IsBrowserReady()) {
+    LOG(INFO) << "ABP: Browser ready, centering cursor";
+    cursor_centered_ = true;
+    controller_->CenterMouseInActiveTab();
+  } else {
+    // Not ready yet, poll again
+    content::GetUIThreadTaskRunner({})->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&AbpHttpServer::PollForReadyAndCenterCursor,
+                       base::Unretained(this)),
+        base::Milliseconds(100));
   }
 }
 

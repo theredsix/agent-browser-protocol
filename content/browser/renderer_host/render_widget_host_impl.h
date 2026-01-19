@@ -50,6 +50,7 @@
 #include "content/common/content_export.h"
 #include "content/common/frame.mojom-forward.h"
 #include "content/common/input/synthetic_gesture.h"
+#include "third_party/blink/public/mojom/page/virtual_cursor.mojom.h"
 #include "content/common/input/synthetic_gesture_controller.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_process_host_priority_client.h"
@@ -317,6 +318,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       const gfx::Point& point,
       const ui::mojom::MenuSourceType source_type) override;
   void InsertVisualStateCallback(VisualStateCallback callback) override;
+  void SetVirtualCursorPosition(float x, float y, bool visible) override;
+  void SetVirtualCursorType(ui::mojom::CursorType cursor_type) override;
+  void SetVirtualCursorVisible(bool visible) override;
+  void SetVirtualCursorEnabled(bool enabled) override;
 
   // RenderProcessHostPriorityClient implementation.
   RenderProcessHostPriorityClient::Priority GetPriority() override;
@@ -845,6 +850,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       bool from_user_gesture,
       bool unadjusted_movement,
       input::InputRouterImpl::RequestMouseLockCallback response) override;
+  void OnVirtualCursorMoved(float x, float y) override;
 
   // PointerLockContext overrides
   void RequestMouseLockChange(
@@ -1581,6 +1587,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   mojo::AssociatedRemote<blink::mojom::Widget> blink_widget_;
 
   mojo::Remote<blink::mojom::WidgetCompositor> widget_compositor_;
+
+  // Mojo remote for controlling the virtual cursor in the renderer.
+  // Used by ABP (Agent Browser Protocol) for AI agent browser control.
+  mojo::AssociatedRemote<blink::mojom::VirtualCursor> virtual_cursor_remote_;
 
   // Same-process cross-RenderFrameHost navigations may reuse the compositor
   // from the previous RenderFrameHost. While the speculative RenderWidgetHost

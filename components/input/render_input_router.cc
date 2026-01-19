@@ -29,6 +29,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/latency/latency_info.h"
 
@@ -342,9 +343,27 @@ blink::mojom::InputEventResultState RenderInputRouter::FilterInputEvent(
     return blink::mojom::InputEventResultState::kNoConsumerExists;
   }
 
-  // Block real system input when ABP input-only mode is enabled.
+  // ABP: Intercept mouse events and notify browser of cursor position.
+  // This runs before blocking so we capture position from events that will be
+  // processed (CDP events always, system events only if allowed).
+  if (abp_enabled_ && render_input_router_client_ &&
+      WebInputEvent::IsMouseEventType(event.GetType())) {
+    const auto& mouse_event =
+        static_cast<const blink::WebMouseEvent&>(event);
+    bool is_cdp_event = event.GetModifiers() & WebInputEvent::kFromDebugger;
+
+    // Capture position from CDP events (always) or system events (only if allowed)
+    if (is_cdp_event || allow_system_inputs_) {
+      float x = mouse_event.PositionInWidget().x();
+      float y = mouse_event.PositionInWidget().y();
+      render_input_router_client_->OnVirtualCursorMoved(x, y);
+    }
+  }
+
+  // Block real system input when ABP is enabled (unless --allow-system-inputs).
   // Only allow events marked with kFromDebugger (from CDP/ABP).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch("abp-input-only") &&
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("enable-abp") &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch("allow-system-inputs") &&
       !(event.GetModifiers() & WebInputEvent::kFromDebugger)) {
     return blink::mojom::InputEventResultState::kNoConsumerExists;
   }

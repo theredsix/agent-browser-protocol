@@ -1,0 +1,40 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "ui/base/cursor/mojom/cursor_type.mojom";
+
+// Interface for controlling a virtual cursor in the renderer.
+// This is used by ABP (Agent Browser Protocol) to display a cursor
+// in the compositor layer for AI agent browser control.
+// Direction: Browser -> Renderer
+interface VirtualCursor {
+  // Sets the position of the virtual cursor.
+  // |x| and |y| are in CSS pixels relative to the viewport.
+  // |visible| controls whether the cursor is shown.
+  SetPosition(float x, float y, bool visible);
+
+  // Sets the cursor type/shape to display.
+  SetCursorType(ui.mojom.CursorType cursor_type);
+
+  // Shows or hides the virtual cursor without changing position.
+  SetVisible(bool visible);
+
+  // Enables or disables the virtual cursor system entirely.
+  // When disabled, the cursor layer is removed from the compositor.
+  SetEnabled(bool enabled);
+};
+
+// Interface for notifying the browser of cursor position changes.
+// Used by RenderInputRouter to notify AbpController when mouse events
+// are intercepted from the input pipeline.
+// Direction: Renderer -> Browser
+interface VirtualCursorClient {
+  // Called when a mouse event is intercepted in the input pipeline.
+  // |x| and |y| are the cursor position in CSS pixels relative to viewport.
+  // This is called for CDP events always, and for system events only when
+  // --allow-system-inputs is passed.
+  OnVirtualCursorMoved(float x, float y);
+};

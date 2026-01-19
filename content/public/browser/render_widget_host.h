@@ -24,6 +24,7 @@
 #include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-forward.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/display/screen_infos.h"
@@ -353,6 +354,23 @@ class CONTENT_EXPORT RenderWidgetHost {
   // This can run synchronously on failure.
   using VisualStateCallback = base::OnceCallback<void(bool)>;
   virtual void InsertVisualStateCallback(VisualStateCallback callback) {}
+
+  // Virtual cursor methods for ABP (Agent Browser Protocol).
+  // These allow AI agents to display a cursor in the renderer's compositor.
+
+  // Sets the virtual cursor position in CSS pixels.
+  // |visible| controls whether the cursor is shown at this position.
+  virtual void SetVirtualCursorPosition(float x, float y, bool visible) {}
+
+  // Sets the virtual cursor type/shape.
+  virtual void SetVirtualCursorType(ui::mojom::CursorType cursor_type) {}
+
+  // Shows or hides the virtual cursor without changing position.
+  virtual void SetVirtualCursorVisible(bool visible) {}
+
+  // Enables or disables the virtual cursor system entirely.
+  // When disabled, the cursor layer is removed from the compositor.
+  virtual void SetVirtualCursorEnabled(bool enabled) {}
 };
 
 }  // namespace content

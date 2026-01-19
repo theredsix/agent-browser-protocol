@@ -840,6 +840,35 @@ void WebFrameWidgetImpl::BindWidgetCompositor(
   widget_base_->BindWidgetCompositor(std::move(receiver));
 }
 
+void WebFrameWidgetImpl::BindVirtualCursor(
+    mojo::PendingAssociatedReceiver<mojom::blink::VirtualCursor> receiver) {
+  virtual_cursor_receiver_.Bind(
+      std::move(receiver),
+      local_root_->GetTaskRunner(TaskType::kInternalDefault));
+}
+
+void WebFrameWidgetImpl::SetPosition(float x, float y, bool visible) {
+  virtual_cursor_x_ = x;
+  virtual_cursor_y_ = y;
+  virtual_cursor_visible_ = visible;
+  // TODO(ABP): Update the compositor layer position
+}
+
+void WebFrameWidgetImpl::SetCursorType(ui::mojom::CursorType cursor_type) {
+  virtual_cursor_type_ = cursor_type;
+  // TODO(ABP): Update the cursor shape in the compositor layer
+}
+
+void WebFrameWidgetImpl::SetVisible(bool visible) {
+  virtual_cursor_visible_ = visible;
+  // TODO(ABP): Update cursor layer visibility
+}
+
+void WebFrameWidgetImpl::SetEnabled(bool enabled) {
+  virtual_cursor_enabled_ = enabled;
+  // TODO(ABP): Create or destroy the cursor layer
+}
+
 void WebFrameWidgetImpl::BindInputTargetClient(
     mojo::PendingReceiver<viz::mojom::blink::InputTargetClient> receiver) {
   // Both Browser and Viz attempts to bind this interface. There can be at max
@@ -1572,6 +1601,7 @@ void WebFrameWidgetImpl::Trace(Visitor* visitor) const {
   visitor->Trace(mouse_capture_element_);
   visitor->Trace(device_emulator_);
   visitor->Trace(animation_frame_timing_monitor_);
+  visitor->Trace(virtual_cursor_receiver_);
 }
 
 void WebFrameWidgetImpl::SetNeedsRecalculateRasterScales() {

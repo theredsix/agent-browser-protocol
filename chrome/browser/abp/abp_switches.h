@@ -12,8 +12,8 @@ extern const char kAbpPort[];
 // Path to ABP config file (default: ~/.config/chromium/abp_config.json)
 extern const char kAbpConfig[];
 
-// Block system input, only allow ABP/CDP synthesized events
-extern const char kAbpInputOnly[];
+// Allow system input even when ABP is enabled (ABP blocks system input by default)
+extern const char kAllowSystemInputs[];
 
 }  // namespace abp::switches
 

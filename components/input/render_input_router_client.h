@@ -52,6 +52,10 @@ class COMPONENT_EXPORT(INPUT) RenderInputRouterClient {
       ) = 0;
 
   virtual void OnUnconfirmedTapConvertedToTap() = 0;
+
+  // ABP: Called when a mouse event is intercepted and the virtual cursor
+  // position should be updated. |x| and |y| are in CSS pixels.
+  virtual void OnVirtualCursorMoved(float x, float y) = 0;
 };
 
 }  // namespace input
