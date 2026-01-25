@@ -2,6 +2,8 @@
 
 **A Chromium fork with a REST API built directly into the browser engine for AI agent control.**
 
+**Synchronous browsing for agents:** one request = one completed step (settled state + screenshot + event log).
+
 ```
    Your AI Agent                 ABP Chromium
        |                             |
@@ -25,20 +27,21 @@ Just `curl http://localhost:8222/api/v1/tabs` and you're in.
 
 ## Why Fork Chromium?
 
-Extensions run in a sandbox. CDP was designed for DevTools, not agents. Playwright and Puppeteer are wrappers around protocols never meant for autonomous operation.
+Extensions run in a sandbox. CDP was designed for DevTools, not autonomous control. Playwright and Puppeteer inherit that model: a live, asynchronous browser where agents must guess when an action is complete, juggle sessions, and paper over timing with retries.
 
-We needed something different:
+We needed **synchronous browsing for agents**: a step-based, request/response contract where the agent only ever acts on a stable world state.
 
 | What agents need | What existing tools provide |
 |------------------|----------------------------|
 | Pause JavaScript between actions | Debugging pause (breaks the page) |
-| Virtual time control | Real-time only |
+| Pause time between actions | Real-time only |
 | Compositor-layer cursor rendering | No cursor visibility |
 | Simple REST API | WebSocket + session management |
 | Engine-level event injection | DOM simulation or CDP passthrough |
 | Action-complete detection | Manual waits or flaky heuristics |
+| Event list between actions (new tab, dialog, file picker, etc.) | Polling, or async event subscriptions |
 
-**ABP operates at the C++ engine level.** Mouse clicks inject actual input events through Chromium's input system. Screenshots capture compositor output. JavaScript execution uses the same runtime as the page. No bridges, no sandboxes, no protocol overhead.
+**ABP treats the browser as a step machine.** Each API call injects real input through Chromium's input system, waits for an engine-defined "settled" boundary, captures compositor output (with cursor), and returns the events that occurred during the step. JavaScript and virtual time are paused between steps—so the agent experiences a synchronous, deterministic control surface over an inherently asynchronous web.
 
 ---
 
@@ -403,10 +406,9 @@ ABP is under active development. Current implementation:
 - MCP server with 14 tools
 
 **Not yet implemented:**
-- Network interception
-- Cookie management
-- Window management
-- Full-page screenshots
+- Action success/failure tracking
+- Revert URL to last known success state
+- Revert browser to last known success state
 
 ---
 
@@ -428,4 +430,4 @@ Chromium is licensed under the BSD 3-Clause License. ABP modifications follow th
 
 ## Acknowledgments
 
-ABP builds on the incredible work of the Chromium team. We're grateful for their commitment to open source.
+ABP builds on the incredible work of the Chromium team. We're grateful for their commitment to open source. This fork was created with the assistance of Claude Code.

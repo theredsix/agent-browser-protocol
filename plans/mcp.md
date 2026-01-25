@@ -1,10 +1,14 @@
-# Agent Browser Protocol - MCP Server Specification
+# Agent Browser Protocol - Embedded MCP Server Specification
+
+## Overview
+
+The ABP MCP Server is embedded directly in the Chromium browser, exposing browser control capabilities through the Model Context Protocol (MCP). This eliminates the need for a separate Node.js bridge process - starting Chrome with `--enable-abp` provides both REST API and MCP protocol on the same port (8222).
 
 ## Implementation Status
 
-**Location:** `tools/abp-mcp-server/`
+**Location:** `chrome/browser/abp/`
 
-The MCP server is implemented in TypeScript and provides a bridge between AI agents (like Claude) and the ABP REST API.
+The MCP server is implemented in C++ as part of `AbpHttpServer`, handling MCP Streamable HTTP transport alongside the existing REST API.
 
 ### Implemented Tools (14 total)
 
@@ -25,212 +29,497 @@ The MCP server is implemented in TypeScript and provides a bridge between AI age
 | `browser_screenshot` | Take screenshot | `POST /tabs/{id}/screenshot` |
 | `browser_execute_javascript` | Execute JavaScript | `POST /tabs/{id}/execute` |
 
-### Not Yet Implemented in MCP Server
-
-The following tools are documented below as planned features but are not yet implemented in the MCP server. The underlying REST endpoints may or may not exist.
-
 ---
 
-## Overview
-
-The ABP MCP Server exposes browser control capabilities through the Model Context Protocol (MCP), enabling AI agents to interact with the browser using standardized tool calls. The MCP server acts as a bridge between MCP-compatible AI systems and the ABP REST API.
-
 ## Architecture
+
+### Embedded Design (New)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    AI Agent / LLM                           │
 └─────────────────────────┬───────────────────────────────────┘
-                          │ MCP Protocol (stdio/SSE)
+                          │ MCP Streamable HTTP (POST/SSE)
+                          │ or REST API (GET/POST/DELETE)
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   ABP MCP Server                            │
-│              (Node.js / Python / Rust)                      │
+│  AbpHttpServer (IO thread)                     Port 8222    │
+│  ├── /api/v1/*           → REST API (existing)              │
+│  └── /mcp                → MCP Streamable HTTP (new)        │
 └─────────────────────────┬───────────────────────────────────┘
-                          │ HTTP/REST
+                          │ PostTask to UI thread
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   ABP REST Server                           │
-│              (Embedded in Chromium)                         │
+│  AbpController (UI thread)                                  │
+│  - Direct access to Browser, TabStripModel                  │
+│  - Uses DevToolsAgentHost for CDP commands                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Transport Options
+### Benefits of Embedded Design
 
-### stdio (Default)
-Standard input/output for local process communication.
+1. **Single Process**: No Node.js dependency, no IPC overhead
+2. **Single Port**: Both REST and MCP on localhost:8222
+3. **Unified Auth**: Same `--abp-auth-token` for both protocols
+4. **Lower Latency**: Direct function calls instead of HTTP round-trips
+5. **Simpler Deployment**: Just start Chrome with `--enable-abp`
 
-```bash
-abp-mcp-server --transport stdio --abp-url http://localhost:8222
+---
+
+## MCP Streamable HTTP Transport
+
+ABP implements the MCP Streamable HTTP transport (protocol version 2025-03-26) with a single endpoint at `/mcp`.
+
+### Endpoint Structure
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/mcp` | Send JSON-RPC messages (requests, notifications, responses) |
+| GET | `/mcp` | Open SSE stream for server-initiated messages |
+| DELETE | `/mcp` | Terminate session (optional) |
+
+### Request Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Content-Type` | Yes | `application/json` |
+| `Accept` | Yes | `application/json, text/event-stream` |
+| `Authorization` | If auth enabled | `Bearer <token>` |
+| `Mcp-Session-Id` | After init | Session ID from InitializeResult |
+| `MCP-Protocol-Version` | Yes | `2025-03-26` |
+
+### Response Modes
+
+The server responds to POST requests in one of two ways:
+
+**1. Single JSON Response** (`Content-Type: application/json`)
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": { ... }
+}
 ```
 
-### SSE (Server-Sent Events)
-HTTP-based transport for remote connections.
+**2. SSE Stream** (`Content-Type: text/event-stream`)
+```
+data: {"jsonrpc":"2.0","id":1,"result":{...}}
+
+```
+
+For ABP, most tool calls return single JSON responses. SSE streaming is used for:
+- Long-running operations (navigation with wait conditions)
+- Server-initiated notifications (browser events)
+
+### Session Management
+
+1. Client sends `initialize` request without session ID
+2. Server responds with `Mcp-Session-Id` header
+3. Client includes session ID in all subsequent requests
+4. Session expires after 30 minutes of inactivity (configurable)
+5. HTTP 404 response indicates session expired - client must reinitialize
+
+---
+
+## MCP Message Flow
+
+### Initialization
+
+```
+Client                                  Server (ABP)
+  │                                        │
+  │  POST /mcp                             │
+  │  Content-Type: application/json        │
+  │  Accept: application/json, text/event-stream
+  │  {"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+  │    "protocolVersion":"2025-03-26",
+  │    "clientInfo":{"name":"claude","version":"1.0"},
+  │    "capabilities":{}
+  │  }}
+  │ ─────────────────────────────────────► │
+  │                                        │
+  │  HTTP 200 OK                           │
+  │  Content-Type: application/json        │
+  │  Mcp-Session-Id: abc123...             │
+  │  {"jsonrpc":"2.0","id":1,"result":{
+  │    "protocolVersion":"2025-03-26",
+  │    "serverInfo":{"name":"abp-browser","version":"1.0.0"},
+  │    "capabilities":{"tools":{}}
+  │  }}
+  │ ◄───────────────────────────────────── │
+  │                                        │
+  │  POST /mcp                             │
+  │  Mcp-Session-Id: abc123...             │
+  │  {"jsonrpc":"2.0","method":"notifications/initialized"}
+  │ ─────────────────────────────────────► │
+  │                                        │
+  │  HTTP 202 Accepted                     │
+  │ ◄───────────────────────────────────── │
+```
+
+### Tool Call (Simple)
+
+```
+Client                                  Server (ABP)
+  │                                        │
+  │  POST /mcp                             │
+  │  Mcp-Session-Id: abc123...             │
+  │  {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
+  │    "name":"browser_list_tabs",
+  │    "arguments":{}
+  │  }}
+  │ ─────────────────────────────────────► │
+  │                                        │
+  │  HTTP 200 OK                           │
+  │  Content-Type: application/json        │
+  │  {"jsonrpc":"2.0","id":2,"result":{
+  │    "content":[{"type":"text","text":"[{\"id\":\"...\"}]"}]
+  │  }}
+  │ ◄───────────────────────────────────── │
+```
+
+### Tool Call with SSE (Long-running)
+
+For operations like navigation with `wait_until: network_idle`:
+
+```
+Client                                  Server (ABP)
+  │                                        │
+  │  POST /mcp                             │
+  │  {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
+  │    "name":"browser_navigate",
+  │    "arguments":{"tab_id":"...","url":"https://example.com",
+  │      "wait_until":{"type":"network_idle"}}
+  │  }}
+  │ ─────────────────────────────────────► │
+  │                                        │
+  │  HTTP 200 OK                           │
+  │  Content-Type: text/event-stream       │
+  │                                        │
+  │  data: {"jsonrpc":"2.0","method":"notifications/progress",
+  │         "params":{"token":3,"value":{"kind":"report","message":"Loading..."}}}
+  │ ◄───────────────────────────────────── │
+  │                                        │
+  │  data: {"jsonrpc":"2.0","id":3,"result":{
+  │         "content":[{"type":"text","text":"{\"url\":\"...\"}"}]}}
+  │ ◄───────────────────────────────────── │
+  │                                        │
+  │  [Connection closed by server]         │
+```
+
+### Server-Initiated Messages (GET Stream)
+
+For browser events (dialogs, downloads, etc.):
+
+```
+Client                                  Server (ABP)
+  │                                        │
+  │  GET /mcp                              │
+  │  Accept: text/event-stream             │
+  │  Mcp-Session-Id: abc123...             │
+  │ ─────────────────────────────────────► │
+  │                                        │
+  │  HTTP 200 OK                           │
+  │  Content-Type: text/event-stream       │
+  │                                        │
+  │  [Connection held open]                │
+  │                                        │
+  │  data: {"jsonrpc":"2.0","method":"notifications/browser/dialog",
+  │         "params":{"type":"alert","message":"Hello!"}}
+  │ ◄───────────────────────────────────── │
+  │                                        │
+  │  data: {"jsonrpc":"2.0","method":"notifications/browser/download",
+  │         "params":{"id":"dl_1","state":"completed"}}
+  │ ◄───────────────────────────────────── │
+```
+
+---
+
+## Implementation Details
+
+### File Structure
+
+```
+chrome/browser/abp/
+├── BUILD.gn                    # Add mcp files
+├── abp_http_server.h/cc        # Add MCP routing
+├── abp_mcp_handler.h/cc        # NEW: MCP protocol handler
+├── abp_mcp_session.h/cc        # NEW: Session state management
+└── abp_mcp_tools.h/cc          # NEW: Tool definitions and dispatch
+```
+
+### AbpMcpHandler Class
+
+```cpp
+// abp_mcp_handler.h
+namespace abp {
+
+class AbpMcpHandler {
+ public:
+  explicit AbpMcpHandler(AbpController* controller);
+
+  // Handle POST to /mcp - returns response via callback
+  // Callback receives: (status_code, content_type, body)
+  // For SSE, callback is called multiple times with event data
+  void HandlePost(const std::string& body,
+                  const std::string& session_id,
+                  ResponseCallback callback);
+
+  // Handle GET to /mcp - opens SSE stream
+  // Returns session_id for new sessions
+  void HandleGet(const std::string& session_id,
+                 SSECallback sse_callback);
+
+  // Handle DELETE to /mcp - terminates session
+  void HandleDelete(const std::string& session_id,
+                    ResponseCallback callback);
+
+ private:
+  // JSON-RPC dispatch
+  void HandleInitialize(const base::Value::Dict& params,
+                        ResponseCallback callback);
+  void HandleToolsList(ResponseCallback callback);
+  void HandleToolsCall(const base::Value::Dict& params,
+                       ResponseCallback callback);
+  void HandleResourcesList(ResponseCallback callback);
+  void HandleResourcesRead(const base::Value::Dict& params,
+                           ResponseCallback callback);
+
+  // Session management
+  std::string CreateSession();
+  AbpMcpSession* GetSession(const std::string& session_id);
+  void CleanupExpiredSessions();
+
+  AbpController* controller_;  // Not owned
+  std::map<std::string, std::unique_ptr<AbpMcpSession>> sessions_;
+};
+
+}  // namespace abp
+```
+
+### Routing in AbpHttpServer
+
+```cpp
+// In abp_http_server.cc HandleRequestOnUI()
+
+void AbpHttpServer::HandleRequestOnUI(int connection_id,
+                                      std::string method,
+                                      std::string path,
+                                      std::string body) {
+  // ... existing code ...
+
+  // Route MCP requests
+  if (path == "/mcp" || base::StartsWith(path, "/mcp?")) {
+    std::string session_id = ExtractSessionId(headers);
+
+    if (method == "POST") {
+      mcp_handler_->HandlePost(body, session_id, std::move(callback));
+    } else if (method == "GET") {
+      mcp_handler_->HandleGet(session_id, std::move(sse_callback));
+    } else if (method == "DELETE") {
+      mcp_handler_->HandleDelete(session_id, std::move(callback));
+    } else {
+      std::move(callback).Run(405, "application/json",
+                              R"({"error":"Method not allowed"})");
+    }
+    return;
+  }
+
+  // ... existing REST API routing ...
+}
+```
+
+### Tool Dispatch
+
+The MCP handler translates tool calls directly to AbpController methods, avoiding HTTP round-trips:
+
+```cpp
+void AbpMcpHandler::HandleToolsCall(const base::Value::Dict& params,
+                                    ResponseCallback callback) {
+  std::string* tool_name = params.FindString("name");
+  const base::Value::Dict* args = params.FindDict("arguments");
+
+  if (*tool_name == "browser_list_tabs") {
+    // Direct call to controller
+    base::Value::List tabs = controller_->GetTabs();
+    SendToolResult(std::move(callback), TabsToJson(tabs));
+
+  } else if (*tool_name == "browser_navigate") {
+    std::string* tab_id = args->FindString("tab_id");
+    std::string* url = args->FindString("url");
+    controller_->Navigate(*tab_id, *url,
+        base::BindOnce(&AbpMcpHandler::OnNavigateComplete,
+                       weak_factory_.GetWeakPtr(),
+                       std::move(callback)));
+
+  } else if (*tool_name == "browser_screenshot") {
+    // ... etc
+  }
+}
+```
+
+### SSE Connection Management
+
+For server-initiated notifications, maintain a list of active SSE connections per session:
+
+```cpp
+class AbpMcpSession {
+ public:
+  void AddSSEConnection(int connection_id, SSECallback callback);
+  void RemoveSSEConnection(int connection_id);
+  void BroadcastNotification(const base::Value::Dict& notification);
+
+ private:
+  std::string session_id_;
+  base::Time created_at_;
+  base::Time last_activity_;
+  std::map<int, SSECallback> sse_connections_;
+};
+```
+
+---
+
+## Authentication
+
+MCP uses the same authentication as the REST API:
 
 ```bash
-abp-mcp-server --transport sse --port 3000 --abp-url http://localhost:8222
+# Start with auth token
+./chrome --enable-abp --abp-auth-token=secret123
+
+# MCP requests include Bearer token
+curl -X POST http://localhost:8222/mcp \
+  -H "Authorization: Bearer secret123" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize",...}'
 ```
+
+The `Authorization` header is validated before processing any MCP request. Invalid/missing tokens return HTTP 401.
+
+---
 
 ## Configuration
 
+### Command Line Flags
+
+| Flag | Description |
+|------|-------------|
+| `--enable-abp` | Enable ABP (REST + MCP) |
+| `--abp-port=PORT` | Server port (default: 8222) |
+| `--abp-auth-token=TOKEN` | Authentication token |
+| `--abp-session-dir=PATH` | Session data directory |
+| `--abp-mcp-session-timeout=SECONDS` | MCP session timeout (default: 1800) |
+
 ### Environment Variables
 
+For clients connecting to ABP MCP:
+
 ```bash
-ABP_URL=http://localhost:8222    # ABP REST server URL
-ABP_AUTH_TOKEN=secret            # Optional auth token
-ABP_MCP_PORT=3000                # Port for SSE transport
-ABP_MCP_LOG_LEVEL=info           # Logging level
-```
-
-### Config File (`abp-mcp.json`)
-
-```json
-{
-  "abp": {
-    "url": "http://localhost:8222",
-    "auth_token": null,
-    "timeout_ms": 30000
-  },
-  "mcp": {
-    "transport": "stdio",
-    "port": 3000,
-    "name": "abp-browser",
-    "version": "1.0.0"
-  },
-  "features": {
-    "screenshots": true,
-    "network_interception": true,
-    "javascript_execution": true
-  }
-}
+ABP_MCP_URL=http://localhost:8222/mcp
+ABP_AUTH_TOKEN=secret123
 ```
 
 ---
 
-## Standard Action Parameters
+## Client Configuration
 
-All action tools (tools that modify browser state) accept a standard `wait_until` parameter and return a standard response envelope.
+### Claude Desktop
 
-### Wait Until Parameter
-
-Every action tool accepts an optional `wait_until` object:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `type` | string | `action_complete` | Wait condition type |
-| `timeout_ms` | number | 30000 | Maximum wait time |
-| `idle_time_ms` | number | 500 | Idle duration for `network_idle` |
-| `duration_ms` | number | - | Fixed wait for `time` type |
-
-**Wait types:**
-- `immediate` - Return immediately after action dispatch
-- `action_complete` - Wait for engine rendering/navigation lull (default)
-- `network_idle` - Wait until no network activity
-- `time` - Wait for fixed duration
-
-### Screenshot Parameter
-
-Every action tool accepts an optional `screenshot` object:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `area` | string | `viewport` | `none` or `viewport` |
-| `markup` | string | `none` | Element markup overlay |
-
-**Markup values:**
-- `none` - No element markup
-- `interactive` - All interactive elements (clickable + typeable)
-- `clickable` - Buttons, links, clickable elements
-- `typeable` - Text inputs, textareas, contenteditable
-- `inputs` - All form inputs
-
-### Standard Action Response
-
-All action tools return:
+Add to `claude_desktop_config.json`:
 
 ```json
 {
-  "result": { ... },
-  "screenshot": {
-    "data": "base64-encoded-webp",
-    "format": "webp",
-    "width": 1920,
-    "height": 1080,
-    "markup": "interactive",
-    "marked_elements": [
-      {
-        "index": 0,
-        "type": "button",
-        "bounds": {"x": 100, "y": 200, "width": 80, "height": 32},
-        "center": {"x": 140, "y": 216},
-        "text": "Submit"
-      }
-    ]
-  },
-  "scroll": {
-    "horizontal_percent": 0,
-    "vertical_percent": 25.5,
-    "page_width": 1920,
-    "page_height": 4700
-  },
-  "events": [
-    {
-      "type": "event_type",
-      "timestamp": 1699999999999,
-      "data": { ... }
+  "mcpServers": {
+    "browser": {
+      "transport": "streamable-http",
+      "url": "http://localhost:8222/mcp"
     }
-  ],
-  "timing": {
-    "action_started": 1699999999000,
-    "action_completed": 1699999999050,
-    "wait_completed": 1699999999500,
-    "total_ms": 500
   }
 }
 ```
 
-### Marked Elements
+With authentication:
 
-When `screenshot.markup` is not `none`, the response includes `marked_elements` with clickable coordinates:
+```json
+{
+  "mcpServers": {
+    "browser": {
+      "transport": "streamable-http",
+      "url": "http://localhost:8222/mcp",
+      "headers": {
+        "Authorization": "Bearer secret123"
+      }
+    }
+  }
+}
+```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `index` | number | Element index (matches label drawn on screenshot) |
-| `type` | string | `button`, `link`, `input`, `textarea`, `select`, `checkbox`, `radio` |
-| `bounds` | object | Bounding box `{x, y, width, height}` |
-| `center` | object | Center point `{x, y}` - use for clicking |
-| `text` | string | Visible text content |
-| `tag` | string | HTML tag name |
-| `input_type` | string | Input type for `<input>` elements |
-| `placeholder` | string | Placeholder text |
-| `href` | string | Link URL for `<a>` elements |
+### Programmatic Client (Python)
 
-The `scroll` object indicates the current scroll position as a percentage (0-100) for both axes, along with total page dimensions.
+```python
+import httpx
 
-### Event Types
+class ABPMcpClient:
+    def __init__(self, url="http://localhost:8222/mcp", token=None):
+        self.url = url
+        self.session_id = None
+        self.headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": "2025-03-26",
+        }
+        if token:
+            self.headers["Authorization"] = f"Bearer {token}"
 
-Events captured between action and wait completion:
+    def initialize(self):
+        response = httpx.post(self.url, headers=self.headers, json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-03-26",
+                "clientInfo": {"name": "python-client", "version": "1.0"},
+                "capabilities": {}
+            }
+        })
+        self.session_id = response.headers.get("Mcp-Session-Id")
+        return response.json()
 
-| Type | Description |
-|------|-------------|
-| `navigation` | Tab navigated to new URL |
-| `dialog` | Alert/confirm/prompt appeared |
-| `file_chooser` | Native file picker opened |
-| `file_selected` | Files were selected in file chooser |
-| `file_chooser_cancelled` | File chooser dismissed without selection |
-| `popup` | New window/tab opened |
-| `tab_closed` | Tab was closed |
-| `scroll` | Page was scrolled (includes delta and final position) |
-| `download_started` | Download initiated |
-| `download_completed` | Download finished successfully |
+    def call_tool(self, name, arguments=None):
+        headers = {**self.headers, "Mcp-Session-Id": self.session_id}
+        response = httpx.post(self.url, headers=headers, json={
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments or {}}
+        })
+        return response.json()
 
-The `events` array allows agents to detect and respond to dialogs, file choosers, scrolls, downloads, and other browser events that occurred as a result of the action.
+# Usage
+client = ABPMcpClient(token="secret123")
+client.initialize()
+tabs = client.call_tool("browser_list_tabs")
+```
 
 ---
 
-## MCP Tools
+## MCP Tools Reference
 
 ### Browser Management
+
+#### `browser_get_status`
+Get browser initialization status.
+
+**Parameters:** None
+
+**Returns:**
+```json
+{
+  "ready": true,
+  "abp_version": "1.0.0"
+}
+```
 
 #### `browser_get_info`
 Get browser version and status information.
@@ -246,14 +535,6 @@ Get browser version and status information.
 }
 ```
 
-#### `browser_shutdown`
-Gracefully shut down the browser.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `timeout_ms` | number | No | Shutdown timeout (default: 5000) |
-
 ---
 
 ### Tab Management
@@ -268,7 +549,7 @@ List all open browser tabs.
 {
   "tabs": [
     {
-      "id": "tab_abc123",
+      "id": "ABC123...",
       "url": "https://example.com",
       "title": "Example Domain",
       "active": true
@@ -284,12 +565,11 @@ Create a new browser tab.
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `url` | string | No | URL to navigate to (default: blank) |
-| `activate` | boolean | No | Make tab active (default: true) |
 
 **Returns:**
 ```json
 {
-  "tab_id": "tab_xyz789",
+  "id": "XYZ789...",
   "url": "https://example.com"
 }
 ```
@@ -302,14 +582,6 @@ Close a browser tab.
 |------|------|----------|-------------|
 | `tab_id` | string | Yes | ID of tab to close |
 
-#### `browser_switch_tab`
-Switch to a specific tab.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | ID of tab to activate |
-
 #### `browser_get_tab_info`
 Get detailed information about a tab.
 
@@ -321,7 +593,7 @@ Get detailed information about a tab.
 **Returns:**
 ```json
 {
-  "id": "tab_abc123",
+  "id": "ABC123...",
   "url": "https://example.com",
   "title": "Example Domain",
   "loading": false,
@@ -329,41 +601,6 @@ Get detailed information about a tab.
   "can_go_forward": false
 }
 ```
-
-#### `browser_duplicate_tab`
-Create a copy of a tab.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | ID of tab to duplicate |
-
-#### `browser_move_tab`
-Move tab to a new position.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | ID of tab to move |
-| `index` | number | Yes | New position index |
-
-#### `browser_pin_tab`
-Pin or unpin a tab.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | ID of tab |
-| `pinned` | boolean | No | Pin state (default: true) |
-
-#### `browser_mute_tab`
-Mute or unmute a tab.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | ID of tab |
-| `muted` | boolean | No | Mute state (default: true) |
 
 ---
 
@@ -377,20 +614,12 @@ Navigate to a URL.
 |------|------|----------|-------------|
 | `tab_id` | string | Yes | Target tab ID |
 | `url` | string | Yes | URL to navigate to |
-| `referrer` | string | No | Referrer URL |
-| `wait_until` | object | No | Wait condition (see Standard Action Parameters) |
 
-**Returns:** Standard action response. The `result` object contains:
+**Returns:**
 ```json
 {
-  "result": {
-    "url": "https://example.com",
-    "title": "Example Domain",
-    "status_code": 200
-  },
-  "screenshot": { ... },
-  "events": [ ... ],
-  "timing": { ... }
+  "url": "https://example.com",
+  "title": "Example Domain"
 }
 ```
 
@@ -417,15 +646,6 @@ Reload the current page.
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `tab_id` | string | Yes | Target tab ID |
-| `ignore_cache` | boolean | No | Bypass cache (default: false) |
-
-#### `browser_stop`
-Stop page loading.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
 
 ---
 
@@ -440,80 +660,6 @@ Click at coordinates.
 | `tab_id` | string | Yes | Target tab ID |
 | `x` | number | Yes | X coordinate |
 | `y` | number | Yes | Y coordinate |
-| `button` | string | No | `left`, `right`, `middle` (default: `left`) |
-| `click_count` | number | No | 1=single, 2=double, 3=triple (default: 1) |
-| `modifiers` | array | No | `["shift", "ctrl", "alt", "meta"]` |
-| `wait_until` | object | No | Wait condition (see Standard Action Parameters) |
-
-**Returns:** Standard action response with screenshot and events.
-
-#### `browser_mouse_move`
-Move mouse to coordinates.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `x` | number | Yes | X coordinate |
-| `y` | number | Yes | Y coordinate |
-| `steps` | number | No | Intermediate steps for smooth movement |
-
-#### `browser_scroll`
-Scroll the page.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `x` | number | No | X position to scroll at (default: center) |
-| `y` | number | No | Y position to scroll at (default: center) |
-| `delta_x` | number | No | Horizontal scroll amount |
-| `delta_y` | number | No | Vertical scroll amount (negative = down) |
-
-#### `browser_drag`
-Drag from one position to another.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `from_x` | number | Yes | Start X coordinate |
-| `from_y` | number | Yes | Start Y coordinate |
-| `to_x` | number | Yes | End X coordinate |
-| `to_y` | number | Yes | End Y coordinate |
-
-#### `browser_hover`
-Move mouse to coordinates and wait (trigger hover states).
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `x` | number | Yes | X coordinate |
-| `y` | number | Yes | Y coordinate |
-| `duration_ms` | number | No | Time to hover (default: 100) |
-
-#### `browser_mouse_down`
-Press mouse button without releasing.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `x` | number | Yes | X coordinate |
-| `y` | number | Yes | Y coordinate |
-| `button` | string | No | `left`, `right`, `middle` (default: `left`) |
-
-#### `browser_mouse_up`
-Release mouse button.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `x` | number | Yes | X coordinate |
-| `y` | number | Yes | Y coordinate |
-| `button` | string | No | `left`, `right`, `middle` (default: `left`) |
 
 ---
 
@@ -527,112 +673,6 @@ Type text at current focus position.
 |------|------|----------|-------------|
 | `tab_id` | string | Yes | Target tab ID |
 | `text` | string | Yes | Text to type |
-| `delay_ms` | number | No | Delay between keystrokes |
-
-#### `browser_press_key`
-Press a single key.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `key` | string | Yes | Key to press (e.g., `Enter`, `Tab`, `Escape`) |
-| `modifiers` | array | No | `["shift", "ctrl", "alt", "meta"]` |
-
-#### `browser_shortcut`
-Execute a keyboard shortcut.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `keys` | array | Yes | Keys to press together, e.g., `["ctrl", "a"]` |
-
-#### `browser_key_down`
-Press key without releasing.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `key` | string | Yes | Key to press |
-
-#### `browser_key_up`
-Release a pressed key.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `key` | string | Yes | Key to release |
-
-#### `browser_insert_text`
-Insert text directly without key events.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `text` | string | Yes | Text to insert |
-
----
-
-### Page Content
-
-#### `browser_get_page_content`
-Get the page content.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `format` | string | No | `html`, `text`, or `markdown` (default: `text`) |
-
-**Returns:**
-```json
-{
-  "content": "Page text content...",
-  "title": "Example Domain",
-  "url": "https://example.com"
-}
-```
-
-#### `browser_execute_javascript`
-Execute JavaScript in the page context and retrieve results.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `expression` | string | Yes | JavaScript expression to evaluate |
-| `await_promise` | boolean | No | Wait for promise resolution (default: true) |
-| `timeout_ms` | number | No | Timeout for promises (default: 5000) |
-
-**Returns:**
-```json
-{
-  "value": 42,
-  "type": "number"
-}
-```
-
-**Example expressions:**
-```javascript
-// Count elements
-"document.querySelectorAll('button').length"
-
-// Check state
-"window.scrollY"
-"document.readyState"
-
-// Extract data
-"Array.from(document.querySelectorAll('h1')).map(h => h.textContent)"
-
-// Application state
-"window.APP_STATE?.user?.isLoggedIn ?? false"
-```
-
-**Note:** This is for reading page state and extracting data. All user interactions (clicks, typing) should use coordinate-based tools to maintain human-equivalent behavior.
 
 ---
 
@@ -645,349 +685,86 @@ Take a screenshot of the page.
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `tab_id` | string | Yes | Target tab ID |
-| `full_page` | boolean | No | Capture full scrollable page |
-| `region` | object | No | Capture specific region `{x, y, width, height}` |
 | `format` | string | No | `png`, `jpeg`, `webp` (default: `webp`) |
+| `quality` | number | No | Image quality 1-100 for jpeg/webp |
+| `markup` | string | No | Element markup overlay type |
+
+**Markup values:**
+- `none` - No element markup
+- `interactive` - All interactive elements (clickable + typeable)
+- `clickable` - Buttons, links, clickable elements
+- `typeable` - Text inputs, textareas, contenteditable
+- `inputs` - All form inputs
 
 **Returns:**
 ```json
 {
-  "image": "base64-encoded-image-data",
+  "data": "base64-encoded-image-data",
+  "format": "webp",
   "width": 1920,
-  "height": 1080
-}
-```
-
----
-
-### Wait Operations
-
-#### `browser_wait_for_navigation`
-Wait for navigation to complete.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `wait_until` | string | No | `load`, `domcontentloaded`, `networkidle` |
-| `timeout_ms` | number | No | Maximum wait time |
-
-#### `browser_wait_for_network_idle`
-Wait for network activity to stop.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `idle_time_ms` | number | No | Required idle duration (default: 500) |
-| `timeout_ms` | number | No | Maximum wait time |
-
----
-
-### Dialog Handling
-
-#### `browser_handle_dialog`
-Handle an alert, confirm, or prompt dialog.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `action` | string | Yes | `accept` or `dismiss` |
-| `prompt_text` | string | No | Text for prompt dialogs |
-
----
-
-### Cookies
-
-#### `browser_get_cookies`
-Get cookies for the current page.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `url` | string | No | Filter by URL |
-
-**Returns:**
-```json
-{
-  "cookies": [
+  "height": 1080,
+  "marked_elements": [
     {
-      "name": "session_id",
-      "value": "abc123",
-      "domain": "example.com",
-      "path": "/",
-      "secure": true,
-      "httpOnly": true
+      "index": 0,
+      "type": "button",
+      "bounds": {"x": 100, "y": 200, "width": 80, "height": 32},
+      "center": {"x": 140, "y": 216},
+      "text": "Submit"
     }
   ]
 }
 ```
 
-#### `browser_set_cookie`
-Set a cookie.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `name` | string | Yes | Cookie name |
-| `value` | string | Yes | Cookie value |
-| `domain` | string | No | Cookie domain |
-| `path` | string | No | Cookie path |
-| `secure` | boolean | No | Secure flag |
-| `http_only` | boolean | No | HttpOnly flag |
-| `expires` | number | No | Expiration timestamp |
-
-#### `browser_clear_cookies`
-Clear all cookies.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-
 ---
 
-### Downloads
+### JavaScript Execution
 
-#### `browser_configure_downloads`
-Configure download behavior.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `download_path` | string | Yes | Directory to save downloads |
-| `prompt` | boolean | No | Show save dialog (default: false) |
-| `overwrite` | boolean | No | Overwrite existing files (default: true) |
-
-#### `browser_list_downloads`
-List downloads.
+#### `browser_execute_javascript`
+Execute JavaScript in the page context.
 
 **Parameters:**
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `state` | string | No | Filter: `in_progress`, `completed`, `cancelled`, `failed` |
-| `limit` | number | No | Max entries to return |
+| `tab_id` | string | Yes | Target tab ID |
+| `expression` | string | Yes | JavaScript expression to evaluate |
 
 **Returns:**
 ```json
 {
-  "downloads": [
-    {
-      "id": "dl_123",
-      "url": "https://example.com/file.pdf",
-      "filename": "file.pdf",
-      "path": "/downloads/file.pdf",
-      "state": "completed",
-      "bytes_received": 102400,
-      "total_bytes": 102400
-    }
-  ]
+  "value": 42,
+  "type": "number"
 }
 ```
-
-#### `browser_get_download`
-Get information about a specific download.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `download_id` | string | Yes | Download ID |
-
-#### `browser_wait_for_download`
-Wait for a download to start or complete.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `state` | string | No | `started` or `completed` (default: `completed`) |
-| `timeout_ms` | number | No | Maximum wait time |
-
-**Returns:**
-```json
-{
-  "id": "dl_456",
-  "path": "/downloads/report.pdf",
-  "state": "completed"
-}
-```
-
-#### `browser_cancel_download`
-Cancel an in-progress download.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `download_id` | string | Yes | Download ID |
-
----
-
-### File Chooser (Native Dialogs)
-
-Handle native OS file picker dialogs that appear when clicking file inputs or "Save As" buttons.
-
-#### `browser_set_file_chooser_files`
-Set files to be selected when a file chooser dialog appears. Call this before triggering the dialog, or when a dialog is pending.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `files` | array | No* | File paths for open dialogs |
-| `path` | string | No* | Save path for save dialogs |
-
-*Use `files` for open dialogs, `path` for save dialogs.
-
-**Example (open dialog):**
-```json
-{
-  "tab_id": "tab_abc123",
-  "files": ["/path/to/document.pdf", "/path/to/image.png"]
-}
-```
-
-**Example (save dialog):**
-```json
-{
-  "tab_id": "tab_abc123",
-  "path": "/path/to/save/output.pdf"
-}
-```
-
-#### `browser_configure_file_chooser`
-Pre-configure automatic file selection for future dialogs.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-| `auto_select` | boolean | No | Auto-select files without waiting |
-| `default_files` | array | No | Default files for open dialogs |
-| `default_save_path` | string | No | Default directory for save dialogs |
-
-When `auto_select` is `true`, file choosers will automatically use the configured paths without waiting for explicit `browser_set_file_chooser_files` calls.
-
-#### `browser_cancel_file_chooser`
-Dismiss a pending file chooser without selecting files.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tab_id` | string | Yes | Target tab ID |
-
----
-
-### Window Management
-
-#### `browser_get_window_info`
-Get browser window information.
-
-**Parameters:** None
-
-**Returns:**
-```json
-{
-  "state": "normal",
-  "bounds": {"x": 0, "y": 0, "width": 1920, "height": 1080},
-  "fullscreen": false,
-  "minimized": false,
-  "maximized": false
-}
-```
-
-#### `browser_set_window_bounds`
-Set browser window size and position.
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `x` | number | No | X position |
-| `y` | number | No | Y position |
-| `width` | number | No | Window width |
-| `height` | number | No | Window height |
-
-#### `browser_set_window_state`
-Set window state (minimize, maximize, fullscreen).
-
-**Parameters:**
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `state` | string | Yes | `normal`, `minimized`, `maximized`, `fullscreen` |
 
 ---
 
 ## MCP Resources
 
-The MCP server also exposes resources for reading browser state.
+The MCP server exposes resources for reading browser state.
+
+### `browser://status`
+Browser initialization and readiness status.
 
 ### `browser://tabs`
-List of all open tabs.
-
-### `browser://tabs/{tab_id}`
-Current state of a specific tab.
-
-### `browser://tabs/{tab_id}/content`
-Current page content (text).
-
-### `browser://tabs/{tab_id}/screenshot`
-Current page screenshot (base64 PNG).
-
-### `browser://cookies`
-All browser cookies.
-
-### `browser://downloads`
-List of all downloads.
-
-### `browser://downloads/{download_id}`
-Specific download info and status.
-
----
-
-## MCP Prompts
-
-Pre-built prompts for common browser automation tasks.
-
-### `browser_fill_form`
-Guide for filling out a form on the page.
-
-**Arguments:**
-| Name | Type | Description |
-|------|------|-------------|
-| `tab_id` | string | Target tab |
-| `form_data` | object | Field name to value mapping |
-
-### `browser_extract_data`
-Guide for extracting structured data from a page.
-
-**Arguments:**
-| Name | Type | Description |
-|------|------|-------------|
-| `tab_id` | string | Target tab |
-| `schema` | object | JSON schema for expected data |
-
-### `browser_navigate_and_act`
-Guide for multi-step navigation and interaction.
-
-**Arguments:**
-| Name | Type | Description |
-|------|------|-------------|
-| `steps` | array | List of navigation/action steps |
+List of all open browser tabs.
 
 ---
 
 ## Error Handling
 
-MCP errors are returned in standard MCP error format:
+### JSON-RPC Errors
 
 ```json
 {
-  "code": -32000,
-  "message": "Tab not found",
-  "data": {
-    "tab_id": "invalid_id",
-    "abp_error_code": "TAB_NOT_FOUND"
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32000,
+    "message": "Tab not found",
+    "data": {
+      "tab_id": "invalid_id",
+      "abp_error_code": "TAB_NOT_FOUND"
+    }
   }
 }
 ```
@@ -996,31 +773,40 @@ MCP errors are returned in standard MCP error format:
 
 | MCP Code | ABP Code | Description |
 |----------|----------|-------------|
+| -32700 | PARSE_ERROR | Invalid JSON |
+| -32600 | INVALID_REQUEST | Invalid JSON-RPC |
+| -32601 | METHOD_NOT_FOUND | Unknown method |
+| -32602 | INVALID_PARAMS | Invalid parameters |
 | -32000 | TAB_NOT_FOUND | Tab does not exist |
-| -32001 | ELEMENT_NOT_FOUND | Element not found |
+| -32001 | NAVIGATION_FAILED | Navigation failed |
 | -32002 | TIMEOUT | Operation timed out |
-| -32003 | NAVIGATION_FAILED | Navigation failed |
-| -32004 | EVALUATION_ERROR | JavaScript error |
-| -32005 | FILE_CHOOSER_NOT_PRESENT | No file chooser to handle |
-| -32006 | FILE_NOT_FOUND | File path does not exist |
-| -32007 | DOWNLOAD_NOT_FOUND | Download ID not found |
-| -32008 | DOWNLOAD_FAILED | Download could not complete |
-| -32600 | INVALID_REQUEST | Malformed request |
+| -32003 | EVALUATION_ERROR | JavaScript error |
+
+### HTTP Status Codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Success (with JSON or SSE body) |
+| 202 | Accepted (for notifications/responses) |
+| 400 | Bad request (invalid JSON-RPC) |
+| 401 | Unauthorized (missing/invalid auth token) |
+| 404 | Session expired |
+| 405 | Method not allowed |
 
 ---
 
-## Usage Examples
+## Migration from Node.js MCP Server
 
-### Claude Desktop Configuration
+The Node.js MCP server (`tools/abp-mcp-server/`) is deprecated. To migrate:
 
-Add to `claude_desktop_config.json`:
+### Before (Node.js bridge)
 
 ```json
 {
   "mcpServers": {
     "browser": {
-      "command": "abp-mcp-server",
-      "args": ["--transport", "stdio"],
+      "command": "node",
+      "args": ["/path/to/abp-mcp-server/dist/index.js"],
       "env": {
         "ABP_URL": "http://localhost:8222"
       }
@@ -1029,144 +815,54 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-### Example Agent Interaction
+### After (Embedded)
 
-```
-User: Go to example.com and click the "More information" link
-
-Agent: I'll navigate to example.com with interactive markup to find clickable elements.
-
-[Calls browser_new_tab with url="https://example.com", screenshot={markup: "interactive"}]
-→ Response includes:
-  - screenshot: Shows example.com with bounding boxes on interactive elements
-  - marked_elements: [
-      {index: 0, type: "link", text: "More information", center: {x: 450, y: 320}}
-    ]
-  - scroll: {vertical_percent: 0}
-
-I can see the page. Element [0] is the "More information" link at (450, 320).
-
-[Calls browser_click with x=450, y=320]
-→ Response includes:
-  - screenshot: Shows the IANA page after navigation
-  - events: [{"type": "navigation", "data": {"url": "https://iana.org/..."}}]
-
-I've clicked the "More information" link.
-The page has navigated to the IANA website with documentation about example domains.
+```json
+{
+  "mcpServers": {
+    "browser": {
+      "transport": "streamable-http",
+      "url": "http://localhost:8222/mcp"
+    }
+  }
+}
 ```
 
-### Multi-Step Workflow
-
-```
-User: Log into my account on example.com
-
-Agent: I'll help you log in. Let me navigate to the login page with input markup.
-
-[Calls browser_navigate with url="https://example.com/login", screenshot={markup: "inputs"}]
-→ Response includes:
-  - screenshot: Shows login form with bounding boxes on inputs
-  - marked_elements: [
-      {index: 0, type: "input", input_type: "email", placeholder: "Email", center: {x: 300, y: 200}},
-      {index: 1, type: "input", input_type: "password", placeholder: "Password", center: {x: 300, y: 260}},
-      {index: 2, type: "button", text: "Sign In", center: {x: 300, y: 320}}
-    ]
-
-I can see the login form with email [0], password [1], and submit button [2].
-Please provide your username and I'll fill it in.
-
-User: my username is john@example.com
-
-[Calls browser_click with x=300, y=200]
-→ Response shows email field focused
-
-[Calls browser_type with text="john@example.com"]
-→ Response shows email entered
-
-[Calls browser_click with x=300, y=260]
-→ Response shows password field focused
-
-I've entered your email and the password field [1] is now focused.
-For security, please type your password directly or let me know when you're ready to submit.
-```
-
-### Download File Example
-
-```
-User: Download the PDF report from example.com/report and save it to my Downloads folder
-
-Agent: I'll download that report for you.
-
-[Calls browser_configure_downloads with download_path="/home/user/Downloads"]
-[Calls browser_navigate with url="https://example.com/report"]
-→ Response shows page with "Download PDF" button at (500, 350)
-
-[Calls browser_click with x=500, y=350, wait_until={type: "network_idle"}]
-→ Response includes:
-  - screenshot: Shows page after download initiated
-  - events: [
-      {"type": "download_started", "data": {"download_id": "dl_123", "filename": "report.pdf"}},
-      {"type": "download_completed", "data": {"path": "/home/user/Downloads/report.pdf"}}
-    ]
-
-The report has been downloaded to /home/user/Downloads/report.pdf
-```
-
-### File Upload Example
-
-```
-User: Upload my resume to the job application form
-
-Agent: I can see the form. There's an "Upload Resume" button at (400, 280).
-
-[Calls browser_click with x=400, y=280]
-→ Response includes:
-  - screenshot: Shows the page with file chooser triggered
-  - events: [{"type": "file_chooser", "data": {"chooser_type": "open", "pending": true}}]
-
-The file chooser appeared. Now I'll provide the file path.
-
-[Calls browser_set_file_chooser_files with files=["/home/user/Documents/resume.pdf"]]
-→ Response includes:
-  - screenshot: Shows the form with "resume.pdf" now selected
-  - events: [{"type": "file_selected", "data": {"files": ["/home/user/Documents/resume.pdf"]}}]
-
-Your resume has been uploaded to the form.
-```
-
-### Save Dialog Example
-
-```
-User: Export the chart and save it as chart.png on my desktop
-
-Agent: I can see the "Export" button at (600, 150). I'll click it and handle the save dialog.
-
-[Calls browser_set_file_chooser_files with path="/home/user/Desktop/chart.png"]
-[Calls browser_click with x=600, y=150]
-→ Response includes:
-  - screenshot: Shows page after export
-  - events: [{"type": "file_selected", "data": {"chooser_type": "save", "path": "/home/user/Desktop/chart.png"}}]
-
-The chart has been saved to /home/user/Desktop/chart.png
-```
+The tool names and parameters are identical - no changes needed to agent code.
 
 ---
 
-## Implementation Notes
+## Implementation Phases
 
-### State Management
-- Tab IDs are persistent for the session
-- Element IDs may become stale after navigation/DOM changes
-- MCP server maintains mapping between friendly IDs and ABP IDs
+### Phase 1: Basic MCP (MVP)
 
-### Concurrency
-- One operation per tab at a time
-- Multiple tabs can be controlled concurrently
-- Long-running operations (navigation, waits) are async
+- [ ] Add `/mcp` endpoint routing in `abp_http_server.cc`
+- [ ] Implement `AbpMcpHandler` with JSON-RPC parsing
+- [ ] Support `initialize`, `tools/list`, `tools/call`
+- [ ] Map tools to direct `AbpController` calls
+- [ ] Single JSON response mode only
+- [ ] No session management (stateless)
 
-### Security Considerations
-- MCP server inherits ABP auth token requirement
-- File upload paths are validated
-- JavaScript evaluation can be disabled via config
+### Phase 2: Sessions and SSE
+
+- [ ] Add `AbpMcpSession` class
+- [ ] Implement session ID generation and tracking
+- [ ] Add session timeout cleanup
+- [ ] Support SSE response mode for tool calls
+- [ ] Implement GET stream for server notifications
+
+### Phase 3: Resources and Notifications
+
+- [ ] Add `resources/list` and `resources/read`
+- [ ] Implement browser event notifications (dialogs, downloads)
+- [ ] Add progress notifications for long operations
+
+### Phase 4: Polish
+
+- [ ] Add `MCP-Protocol-Version` header validation
+- [ ] Implement resumability with event IDs
+- [ ] Add metrics and logging
+- [ ] Remove deprecated Node.js MCP server
 
 ---
 
@@ -1174,3 +870,4 @@ The chart has been saved to /home/user/Desktop/chart.png
 
 - [agent-browser-protocol.md](./agent-browser-protocol.md) - Core ABP architecture
 - [API.md](./API.md) - REST API specification
+- [MCP Specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) - Official MCP transport spec
