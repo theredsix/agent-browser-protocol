@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation Test - Page 1</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #e3f2fd;
+        }
+        h1 {
+            color: #1565c0;
+        }
+        .info-row {
+            margin: 5px 0;
+            font-family: monospace;
+        }
+        .info-label {
+            display: inline-block;
+            width: 150px;
+            color: #666;
+        }
+        a {
+            color: #1565c0;
+            text-decoration: none;
+            padding: 5px 10px;
+            display: inline-block;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+
+        /* Page title and ID - top area */
+        #page-title {
+            position: absolute;
+            left: 20px;
+            top: 20px;
+        }
+        #page-id {
+            position: absolute;
+            left: 20px;
+            top: 60px;
+            font-family: monospace;
+            color: #666;
+        }
+
+        /* Navigation links - spec coordinates for click center */
+        /* link-page-2 center at (100, 150) */
+        #link-page-2 {
+            position: absolute;
+            left: 20px;
+            top: 140px;
+        }
+        /* link-page-3 center at (100, 200) */
+        #link-page-3 {
+            position: absolute;
+            left: 20px;
+            top: 190px;
+        }
+        /* link-external center at (100, 250) */
+        #link-external {
+            position: absolute;
+            left: 20px;
+            top: 240px;
+        }
+        /* link-new-tab center at (100, 300) */
+        #link-new-tab {
+            position: absolute;
+            left: 20px;
+            top: 290px;
+        }
+
+        /* History section */
+        .history-section {
+            position: absolute;
+            left: 350px;
+            top: 100px;
+            background: white;
+            padding: 15px;
+            border: 1px solid #90caf9;
+            border-radius: 4px;
+            min-width: 300px;
+        }
+        .section-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #1565c0;
+        }
+
+        /* Reload section */
+        .reload-section {
+            position: absolute;
+            left: 350px;
+            top: 300px;
+            background: white;
+            padding: 15px;
+            border: 1px solid #90caf9;
+            border-radius: 4px;
+            min-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="page-title">Navigation Test - Page 1</h1>
+    <div id="page-id">Page ID: page-1</div>
+
+    <!-- Navigation links at spec-defined positions -->
+    <a href="navigation-test-page2.html" id="link-page-2">Go to Page 2</a>
+    <a href="navigation-test-page3.html" id="link-page-3">Go to Page 3</a>
+    <a href="https://example.com" id="link-external">External: example.com</a>
+    <a href="navigation-test-page2.html" target="_blank" id="link-new-tab">Open Page 2 in New Tab</a>
+
+    <div class="history-section">
+        <div class="section-title">History State</div>
+        <div class="info-row">
+            <span class="info-label">History Length:</span>
+            <span id="history-length">-</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Current URL:</span>
+            <span id="current-url">-</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Referrer:</span>
+            <span id="referrer">-</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Nav History:</span>
+            <span id="nav-history">-</span>
+        </div>
+    </div>
+
+    <div class="reload-section">
+        <div class="section-title">Reload Detection</div>
+        <div class="info-row">
+            <span class="info-label">Load Timestamp:</span>
+            <span id="load-timestamp">-</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Visit Count:</span>
+            <span id="visit-count">-</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Was Reloaded:</span>
+            <span id="was-reloaded">-</span>
+        </div>
+    </div>
+
+    <script>
+        const PAGE_ID = 'page-1';
+        const loadTimestamp = Date.now();
+
+        document.getElementById('load-timestamp').textContent = new Date(loadTimestamp).toISOString();
+
+        let visitCount = parseInt(sessionStorage.getItem('visit-count-' + PAGE_ID) || '0');
+        visitCount++;
+        sessionStorage.setItem('visit-count-' + PAGE_ID, visitCount);
+        document.getElementById('visit-count').textContent = visitCount;
+
+        let wasReloaded = false;
+        if (performance.navigation) {
+            wasReloaded = performance.navigation.type === 1;
+        } else if (performance.getEntriesByType) {
+            const navEntries = performance.getEntriesByType('navigation');
+            if (navEntries.length > 0) {
+                wasReloaded = navEntries[0].type === 'reload';
+            }
+        }
+        document.getElementById('was-reloaded').textContent = wasReloaded;
+
+        document.getElementById('history-length').textContent = window.history.length;
+        document.getElementById('current-url').textContent = window.location.href;
+        document.getElementById('referrer').textContent = document.referrer || '(none)';
+
+        let navHistory = JSON.parse(sessionStorage.getItem('nav-history') || '[]');
+        navHistory.push({
+            page: PAGE_ID,
+            timestamp: loadTimestamp,
+            url: window.location.href
+        });
+        if (navHistory.length > 10) {
+            navHistory = navHistory.slice(-10);
+        }
+        sessionStorage.setItem('nav-history', JSON.stringify(navHistory));
+        document.getElementById('nav-history').textContent = navHistory.map(h => h.page).join(' -> ');
+
+        window.pageInfo = {
+            pageId: PAGE_ID,
+            loadTimestamp: loadTimestamp,
+            visitCount: visitCount,
+            wasReloaded: wasReloaded,
+            historyLength: window.history.length,
+            referrer: document.referrer
+        };
+    </script>
+</body>
+</html>

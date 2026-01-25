@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screenshot Markup Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #fafafa;
+        }
+
+        .row-label {
+            position: absolute;
+            left: 10px;
+            font-size: 12px;
+            color: #666;
+            font-weight: bold;
+        }
+
+        /* Row 1: Clickable elements (y=100) */
+        #btn-primary {
+            position: absolute;
+            left: 50px;
+            top: 80px;
+            width: 120px;
+            height: 40px;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #link-standard {
+            position: absolute;
+            left: 250px;
+            top: 90px;
+            color: #007bff;
+            text-decoration: underline;
+        }
+        #btn-secondary {
+            position: absolute;
+            left: 450px;
+            top: 80px;
+            width: 120px;
+            height: 40px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #div-clickable {
+            position: absolute;
+            left: 650px;
+            top: 80px;
+            width: 120px;
+            height: 40px;
+            background: #28a745;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        /* Row 2: Typeable elements (y=200) */
+        #input-text {
+            position: absolute;
+            left: 50px;
+            top: 180px;
+            width: 150px;
+            height: 35px;
+            padding: 5px;
+        }
+        #textarea-main {
+            position: absolute;
+            left: 250px;
+            top: 170px;
+            width: 150px;
+            height: 60px;
+            padding: 5px;
+        }
+        #div-editable {
+            position: absolute;
+            left: 450px;
+            top: 175px;
+            width: 150px;
+            height: 50px;
+            border: 1px solid #ccc;
+            padding: 5px;
+            background: white;
+        }
+        #input-password {
+            position: absolute;
+            left: 650px;
+            top: 180px;
+            width: 150px;
+            height: 35px;
+            padding: 5px;
+        }
+
+        /* Row 3: Form inputs (y=300) */
+        #checkbox-1 {
+            position: absolute;
+            left: 50px;
+            top: 290px;
+            width: 20px;
+            height: 20px;
+        }
+        .checkbox-label {
+            position: absolute;
+            left: 75px;
+            top: 290px;
+        }
+        #radio-1 {
+            position: absolute;
+            left: 150px;
+            top: 290px;
+            width: 20px;
+            height: 20px;
+        }
+        .radio-label {
+            position: absolute;
+            left: 175px;
+            top: 290px;
+        }
+        #select-main {
+            position: absolute;
+            left: 250px;
+            top: 285px;
+            width: 150px;
+            height: 30px;
+        }
+        #range-slider {
+            position: absolute;
+            left: 450px;
+            top: 290px;
+            width: 150px;
+        }
+        #input-date {
+            position: absolute;
+            left: 650px;
+            top: 285px;
+            width: 150px;
+            height: 30px;
+        }
+
+        /* Row 4: Non-interactive elements (y=400) */
+        #div-static {
+            position: absolute;
+            left: 50px;
+            top: 380px;
+            width: 120px;
+            height: 40px;
+            background: #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }
+        #btn-disabled {
+            position: absolute;
+            left: 250px;
+            top: 380px;
+            width: 120px;
+            height: 40px;
+            background: #ccc;
+            color: #666;
+            border: none;
+            cursor: not-allowed;
+        }
+        #input-hidden {
+            position: absolute;
+            left: 450px;
+            top: 390px;
+        }
+        .hidden-label {
+            position: absolute;
+            left: 450px;
+            top: 380px;
+            font-size: 12px;
+            color: #999;
+        }
+        #span-text {
+            position: absolute;
+            left: 650px;
+            top: 390px;
+            color: #666;
+        }
+
+        /* Row 5: Edge cases (y=500) */
+        #nested-link {
+            position: absolute;
+            left: 50px;
+            top: 480px;
+        }
+        #nested-btn {
+            width: 120px;
+            height: 40px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #zero-size {
+            position: absolute;
+            left: 250px;
+            top: 490px;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+        }
+        .zero-size-label {
+            position: absolute;
+            left: 250px;
+            top: 480px;
+            font-size: 12px;
+            color: #999;
+        }
+        .overflow-container {
+            position: absolute;
+            left: 450px;
+            top: 470px;
+            width: 80px;
+            height: 50px;
+            overflow: hidden;
+            border: 1px solid #ccc;
+        }
+        #btn-overflow {
+            width: 120px;
+            height: 40px;
+            background: #17a2b8;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #abs-positioned {
+            position: absolute;
+            left: 650px;
+            top: 480px;
+            width: 120px;
+            height: 40px;
+            background: #ffc107;
+            color: black;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 100;
+        }
+
+        /* Row labels */
+        .row1-label { top: 60px; }
+        .row2-label { top: 155px; }
+        .row3-label { top: 265px; }
+        .row4-label { top: 360px; }
+        .row5-label { top: 460px; }
+
+        /* Legend */
+        .legend {
+            position: absolute;
+            left: 50px;
+            top: 550px;
+            background: white;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .legend-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border: 2px solid;
+        }
+        .legend-clickable { border-color: #ff0000; }
+        .legend-typeable { border-color: #00ff00; }
+        .legend-inputs { border-color: #0000ff; }
+
+        /* Animation counter for execution pause testing */
+        #animation-counter {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Row Labels -->
+    <div class="row-label row1-label">Row 1: Clickable</div>
+    <div class="row-label row2-label">Row 2: Typeable</div>
+    <div class="row-label row3-label">Row 3: Form Inputs</div>
+    <div class="row-label row4-label">Row 4: Non-interactive</div>
+    <div class="row-label row5-label">Row 5: Edge Cases</div>
+
+    <!-- Row 1: Clickable elements -->
+    <button id="btn-primary">Primary Button</button>
+    <a href="#" id="link-standard">Standard Link</a>
+    <button id="btn-secondary">Secondary Button</button>
+    <div id="div-clickable" onclick="this.textContent='Clicked!'">Clickable Div</div>
+
+    <!-- Row 2: Typeable elements -->
+    <input type="text" id="input-text" placeholder="Text input">
+    <textarea id="textarea-main" placeholder="Textarea"></textarea>
+    <div id="div-editable" contenteditable="true">Editable div</div>
+    <input type="password" id="input-password" placeholder="Password">
+
+    <!-- Row 3: Form inputs -->
+    <input type="checkbox" id="checkbox-1">
+    <label class="checkbox-label" for="checkbox-1">Check</label>
+    <input type="radio" id="radio-1" name="radio-group">
+    <label class="radio-label" for="radio-1">Radio</label>
+    <select id="select-main">
+        <option>Option 1</option>
+        <option>Option 2</option>
+        <option>Option 3</option>
+    </select>
+    <input type="range" id="range-slider" min="0" max="100" value="50">
+    <input type="date" id="input-date">
+
+    <!-- Row 4: Non-interactive elements -->
+    <div id="div-static">Static Div</div>
+    <button id="btn-disabled" disabled>Disabled Btn</button>
+    <span class="hidden-label">(hidden input below)</span>
+    <input type="hidden" id="input-hidden" value="hidden-value">
+    <span id="span-text">Static text span</span>
+
+    <!-- Row 5: Edge cases -->
+    <a href="#" id="nested-link">
+        <button id="nested-btn">Nested Button</button>
+    </a>
+    <span class="zero-size-label">(zero-size element)</span>
+    <button id="zero-size">Zero Size</button>
+    <div class="overflow-container">
+        <button id="btn-overflow">Overflow Button</button>
+    </div>
+    <div id="abs-positioned" onclick="this.textContent='Clicked!'">Absolute Pos</div>
+
+    <!-- Legend -->
+    <div class="legend">
+        <div class="legend-title">Markup Legend (expected colors)</div>
+        <div class="legend-item">
+            <div class="legend-color legend-clickable"></div>
+            <span>Clickable (buttons, links)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color legend-typeable"></div>
+            <span>Typeable (inputs, textarea, contenteditable)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color legend-inputs"></div>
+            <span>Inputs (all form inputs)</span>
+        </div>
+    </div>
+
+    <!-- Animation counter for pause testing -->
+    <div id="animation-counter">Counter: <span id="counter-value">0</span></div>
+
+    <script>
+        // Counter that increments every 100ms to test execution pause
+        let counter = 0;
+        const counterElement = document.getElementById('counter-value');
+
+        setInterval(function() {
+            counter++;
+            counterElement.textContent = counter;
+        }, 100);
+
+        // Prevent link default behavior for testing
+        document.getElementById('link-standard').addEventListener('click', function(e) {
+            e.preventDefault();
+        });
+        document.getElementById('nested-link').addEventListener('click', function(e) {
+            e.preventDefault();
+        });
+
+        // Expose for testing
+        window.getCounter = function() {
+            return counter;
+        };
+    </script>
+</body>
+</html>

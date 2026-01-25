@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scroll and Execution Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            height: 5000px;
+            background: linear-gradient(to bottom,
+                #e3f2fd 0%,
+                #fff3e0 25%,
+                #e8f5e9 50%,
+                #fce4ec 75%,
+                #f3e5f5 100%
+            );
+        }
+
+        /* Fixed header */
+        #fixed-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: rgba(33, 33, 33, 0.9);
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+            font-family: monospace;
+        }
+        #fixed-header .info {
+            margin-right: 30px;
+        }
+
+        /* Section markers */
+        .section-marker {
+            position: absolute;
+            left: 50px;
+            padding: 20px;
+            background: white;
+            border: 2px solid #333;
+            border-radius: 8px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        #section-1 { top: 80px; border-color: #1565c0; color: #1565c0; }
+        #section-2 { top: 1080px; border-color: #e65100; color: #e65100; }
+        #section-3 { top: 2080px; border-color: #2e7d32; color: #2e7d32; }
+        #section-4 { top: 3080px; border-color: #c62828; color: #c62828; }
+        #section-5 { top: 4080px; border-color: #6a1b9a; color: #6a1b9a; }
+
+        .section-coords {
+            font-size: 14px;
+            font-weight: normal;
+            margin-top: 10px;
+            font-family: monospace;
+        }
+
+        /* Interactive buttons at various positions */
+        .position-btn {
+            position: absolute;
+            left: 300px;
+            width: 150px;
+            height: 50px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            color: white;
+        }
+        #btn-top {
+            top: 80px;
+            background: #1565c0;
+        }
+        #btn-middle {
+            top: 2480px;
+            background: #2e7d32;
+        }
+        #btn-bottom {
+            top: 4880px;
+            background: #6a1b9a;
+        }
+        .btn-clicked {
+            opacity: 0.7;
+        }
+
+        /* Time-based elements */
+        #clock {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            z-index: 999;
+        }
+        #timer-count {
+            position: fixed;
+            top: 120px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            z-index: 999;
+        }
+
+        /* Animation */
+        #animated {
+            position: fixed;
+            top: 180px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: #ff5722;
+            border-radius: 50%;
+            animation: bounce 1s infinite;
+            z-index: 999;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        /* Scroll position display (part of fixed header) */
+        #scroll-y, #scroll-percent, #viewport-info {
+            display: inline;
+        }
+
+        /* Execution state display */
+        #execution-display {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 300px;
+            max-height: 200px;
+            overflow: auto;
+            z-index: 999;
+        }
+
+        /* Virtual cursor test area */
+        #cursor-area {
+            position: absolute;
+            left: 250px;
+            top: 1480px;
+            width: 500px;
+            height: 500px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        #cursor-position {
+            font-family: monospace;
+            font-size: 24px;
+            color: #333;
+        }
+        #cursor-area-label {
+            font-size: 14px;
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Fixed Header with scroll info -->
+    <div id="fixed-header">
+        <span class="info">ScrollY: <span id="scroll-y">0</span>px</span>
+        <span class="info">Scroll: <span id="scroll-percent">0</span>%</span>
+        <span class="info">Viewport: <span id="viewport-info">-</span></span>
+    </div>
+
+    <!-- Section Markers -->
+    <div id="section-1" class="section-marker">
+        Section 1 (Top)
+        <div class="section-coords">Y: 80px</div>
+    </div>
+    <div id="section-2" class="section-marker">
+        Section 2
+        <div class="section-coords">Y: 1080px</div>
+    </div>
+    <div id="section-3" class="section-marker">
+        Section 3 (Middle)
+        <div class="section-coords">Y: 2080px</div>
+    </div>
+    <div id="section-4" class="section-marker">
+        Section 4
+        <div class="section-coords">Y: 3080px</div>
+    </div>
+    <div id="section-5" class="section-marker">
+        Section 5 (Bottom)
+        <div class="section-coords">Y: 4080px</div>
+    </div>
+
+    <!-- Interactive buttons -->
+    <button id="btn-top" class="position-btn">Top Button</button>
+    <button id="btn-middle" class="position-btn">Middle Button</button>
+    <button id="btn-bottom" class="position-btn">Bottom Button</button>
+
+    <!-- Time-based elements -->
+    <div id="clock">Clock: <span id="clock-value">-</span></div>
+    <div id="timer-count">Timer: <span id="timer-value">0</span></div>
+    <div id="animated"></div>
+
+    <!-- Execution display -->
+    <div id="execution-display">
+        <div><strong>Last JS Result:</strong></div>
+        <div id="last-js-result">-</div>
+        <div style="margin-top: 10px;"><strong>Execution Log:</strong></div>
+        <div id="execution-log"></div>
+    </div>
+
+    <!-- Virtual cursor test area -->
+    <div id="cursor-area">
+        <div id="cursor-position">Move mouse here</div>
+        <div id="cursor-area-label">Cursor Test Area (500x500px)</div>
+    </div>
+
+    <script>
+        // Initialize execution history
+        window.executionHistory = [];
+
+        // Update viewport info
+        function updateViewportInfo() {
+            document.getElementById('viewport-info').textContent =
+                window.innerWidth + 'x' + window.innerHeight;
+        }
+        updateViewportInfo();
+        window.addEventListener('resize', updateViewportInfo);
+
+        // Scroll tracking
+        function updateScrollInfo() {
+            const scrollY = window.scrollY;
+            const maxScroll = document.body.scrollHeight - window.innerHeight;
+            const scrollPercent = maxScroll > 0 ? Math.round((scrollY / maxScroll) * 100) : 0;
+
+            document.getElementById('scroll-y').textContent = Math.round(scrollY);
+            document.getElementById('scroll-percent').textContent = scrollPercent;
+        }
+
+        window.addEventListener('scroll', updateScrollInfo);
+        updateScrollInfo();
+
+        // Timer counter (increments every 100ms)
+        let timerCount = 0;
+        const timerElement = document.getElementById('timer-value');
+
+        setInterval(function() {
+            timerCount++;
+            timerElement.textContent = timerCount;
+        }, 100);
+
+        // Clock display (updates every 100ms with Date.now())
+        const clockElement = document.getElementById('clock-value');
+
+        setInterval(function() {
+            clockElement.textContent = Date.now();
+        }, 100);
+
+        // Button click handlers
+        function handleButtonClick(btn) {
+            const originalText = btn.textContent;
+            btn.textContent = 'Clicked!';
+            btn.classList.add('btn-clicked');
+            window['clicked_' + btn.id] = true;
+
+            setTimeout(function() {
+                btn.textContent = originalText;
+                btn.classList.remove('btn-clicked');
+            }, 1000);
+        }
+
+        document.getElementById('btn-top').addEventListener('click', function() {
+            handleButtonClick(this);
+        });
+        document.getElementById('btn-middle').addEventListener('click', function() {
+            handleButtonClick(this);
+        });
+        document.getElementById('btn-bottom').addEventListener('click', function() {
+            handleButtonClick(this);
+        });
+
+        // Cursor area tracking
+        const cursorArea = document.getElementById('cursor-area');
+        const cursorPosition = document.getElementById('cursor-position');
+
+        cursorArea.addEventListener('mousemove', function(e) {
+            const rect = cursorArea.getBoundingClientRect();
+            const x = Math.round(e.clientX - rect.left);
+            const y = Math.round(e.clientY - rect.top);
+            cursorPosition.textContent = `Cursor: (${e.clientX}, ${e.clientY})\nArea-relative: (${x}, ${y})`;
+        });
+
+        cursorArea.addEventListener('mouseleave', function() {
+            cursorPosition.textContent = 'Move mouse here';
+        });
+
+        // Helper function to log JS execution (for testing)
+        window.logExecution = function(expression, result) {
+            const entry = {
+                timestamp: Date.now(),
+                expression: expression,
+                result: result
+            };
+            window.executionHistory.push(entry);
+
+            document.getElementById('last-js-result').textContent =
+                JSON.stringify(result).substring(0, 100);
+
+            const logElement = document.getElementById('execution-log');
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `[${new Date(entry.timestamp).toISOString().substr(11, 8)}] ${expression.substring(0, 30)}...`;
+            logElement.appendChild(logEntry);
+
+            // Keep only last 5 entries visible
+            while (logElement.children.length > 5) {
+                logElement.removeChild(logElement.firstChild);
+            }
+        };
+
+        // Expose state for testing
+        window.getTimerCount = function() {
+            return timerCount;
+        };
+
+        window.getScrollY = function() {
+            return window.scrollY;
+        };
+
+        window.getScrollPercent = function() {
+            const maxScroll = document.body.scrollHeight - window.innerHeight;
+            return maxScroll > 0 ? (window.scrollY / maxScroll) * 100 : 0;
+        };
+
+        window.wasButtonClicked = function(buttonId) {
+            return window['clicked_' + buttonId] === true;
+        };
+
+        window.pageState = {
+            getTimerCount: function() { return timerCount; },
+            getClockValue: function() { return parseInt(clockElement.textContent); },
+            getScrollY: function() { return window.scrollY; },
+            getPageHeight: function() { return document.body.scrollHeight; },
+            getViewportHeight: function() { return window.innerHeight; }
+        };
+
+        // ============================================
+        // VIRTUAL TIME TEST HELPERS
+        // ============================================
+
+        // Store initial time for comparison
+        window.initialLoadTime = Date.now();
+
+        // Record time snapshots for comparison
+        window.timeSnapshots = [];
+        window.recordTimeSnapshot = function(label) {
+            const snapshot = {
+                label: label || 'snapshot-' + window.timeSnapshots.length,
+                dateNow: Date.now(),
+                performanceNow: performance.now(),
+                timerCount: timerCount
+            };
+            window.timeSnapshots.push(snapshot);
+            return snapshot;
+        };
+
+        // Track requestAnimationFrame execution
+        window.rafCount = 0;
+        window.rafTimestamps = [];
+        function trackRAF(timestamp) {
+            window.rafCount++;
+            window.rafTimestamps.push(timestamp);
+            if (window.rafCount < 1000) {
+                requestAnimationFrame(trackRAF);
+            }
+        }
+        requestAnimationFrame(trackRAF);
+
+        // Test microtask queue behavior
+        window.microtaskRan = false;
+        window.scheduleMicrotask = function() {
+            window.microtaskRan = false;
+            queueMicrotask(function() {
+                window.microtaskRan = true;
+                window.microtaskRanAt = Date.now();
+            });
+            return { scheduled: Date.now() };
+        };
+
+        // Test Promise behavior
+        window.promiseResolved = false;
+        window.schedulePromise = function() {
+            window.promiseResolved = false;
+            Promise.resolve().then(function() {
+                window.promiseResolved = true;
+                window.promiseResolvedAt = Date.now();
+            });
+            return { scheduled: Date.now() };
+        };
+
+        // Test setTimeout behavior (for pause verification)
+        window.testTimeoutFired = false;
+        window.testTimeoutFiredAt = null;
+        window.scheduleTestTimeout = function(delayMs) {
+            window.testTimeoutFired = false;
+            window.testTimeoutFiredAt = null;
+            setTimeout(function() {
+                window.testTimeoutFired = true;
+                window.testTimeoutFiredAt = Date.now();
+            }, delayMs);
+            return { scheduled: Date.now(), delay: delayMs };
+        };
+
+        // Get animation element position (for freeze verification)
+        window.getAnimatedPosition = function() {
+            const el = document.getElementById('animated');
+            if (!el) return null;
+            const rect = el.getBoundingClientRect();
+            return {
+                top: rect.top,
+                left: rect.left,
+                timestamp: Date.now()
+            };
+        };
+
+        // Comprehensive virtual time test state
+        window.virtualTimeTest = {
+            getTimerCount: function() { return timerCount; },
+            getClockValue: function() { return parseInt(clockElement.textContent); },
+            getRafCount: function() { return window.rafCount; },
+            getTimeSnapshots: function() { return window.timeSnapshots; },
+            didMicrotaskRun: function() { return window.microtaskRan; },
+            didPromiseResolve: function() { return window.promiseResolved; },
+            didTimeoutFire: function() { return window.testTimeoutFired; },
+            getTimeoutFiredAt: function() { return window.testTimeoutFiredAt; },
+            getAnimatedPosition: window.getAnimatedPosition,
+            recordSnapshot: window.recordTimeSnapshot,
+            scheduleTimeout: window.scheduleTestTimeout,
+            scheduleMicrotask: window.scheduleMicrotask,
+            schedulePromise: window.schedulePromise,
+            getInitialLoadTime: function() { return window.initialLoadTime; },
+            getElapsedTime: function() { return Date.now() - window.initialLoadTime; }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dialog and File Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f8f9fa;
+        }
+
+        .section-label {
+            position: absolute;
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* Dialog Trigger Section (y=100-200) */
+        #btn-alert {
+            position: absolute;
+            left: 50px;
+            top: 80px;
+            width: 120px;
+            height: 40px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #btn-confirm {
+            position: absolute;
+            left: 200px;
+            top: 80px;
+            width: 120px;
+            height: 40px;
+            background: #ffc107;
+            color: black;
+            border: none;
+            cursor: pointer;
+        }
+        #btn-prompt {
+            position: absolute;
+            left: 350px;
+            top: 80px;
+            width: 120px;
+            height: 40px;
+            background: #17a2b8;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .beforeunload-container {
+            position: absolute;
+            left: 500px;
+            top: 85px;
+        }
+        #chk-beforeunload {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        /* Dialog Result Display */
+        #alert-result {
+            position: absolute;
+            left: 50px;
+            top: 140px;
+            color: #dc3545;
+            font-weight: bold;
+            display: none;
+        }
+        #confirm-result {
+            position: absolute;
+            left: 200px;
+            top: 140px;
+            color: #ffc107;
+            font-weight: bold;
+        }
+        #prompt-result {
+            position: absolute;
+            left: 350px;
+            top: 140px;
+            color: #17a2b8;
+            font-weight: bold;
+        }
+
+        /* File Upload Section (y=300-400) */
+        #file-single {
+            position: absolute;
+            left: 50px;
+            top: 280px;
+        }
+        .file-label {
+            position: absolute;
+            font-size: 12px;
+            color: #666;
+        }
+        .file-label-single { left: 50px; top: 260px; }
+        .file-label-multiple { left: 250px; top: 260px; }
+        .file-label-images { left: 450px; top: 260px; }
+
+        #file-multiple {
+            position: absolute;
+            left: 250px;
+            top: 280px;
+        }
+        #file-images {
+            position: absolute;
+            left: 450px;
+            top: 280px;
+        }
+        #drop-zone {
+            position: absolute;
+            left: 50px;
+            top: 330px;
+            width: 200px;
+            height: 80px;
+            border: 2px dashed #ccc;
+            background: #f9f9f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 14px;
+        }
+        #drop-zone.dragover {
+            border-color: #007bff;
+            background: #e7f1ff;
+        }
+
+        /* File Selection Display */
+        #files-selected {
+            position: absolute;
+            left: 280px;
+            top: 330px;
+            background: white;
+            border: 1px solid #ddd;
+            padding: 10px;
+            min-width: 200px;
+            min-height: 50px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        #file-details {
+            position: absolute;
+            left: 500px;
+            top: 330px;
+            background: white;
+            border: 1px solid #ddd;
+            padding: 10px;
+            min-width: 200px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        /* Download Section (y=500-600) */
+        #download-link {
+            position: absolute;
+            left: 50px;
+            top: 480px;
+            color: #007bff;
+        }
+        #btn-download {
+            position: absolute;
+            left: 250px;
+            top: 475px;
+            width: 150px;
+            height: 35px;
+            background: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #btn-save {
+            position: absolute;
+            left: 450px;
+            top: 475px;
+            width: 150px;
+            height: 35px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #download-progress {
+            position: absolute;
+            left: 50px;
+            top: 530px;
+            display: none;
+        }
+        #download-complete {
+            position: absolute;
+            left: 50px;
+            top: 560px;
+            color: #28a745;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Section Labels -->
+    <div class="section-label" style="left: 50px; top: 50px;">Dialog Triggers</div>
+    <div class="section-label" style="left: 50px; top: 230px;">File Upload</div>
+    <div class="section-label" style="left: 50px; top: 450px;">Downloads</div>
+
+    <!-- Dialog Triggers -->
+    <button id="btn-alert">Show Alert</button>
+    <button id="btn-confirm">Show Confirm</button>
+    <button id="btn-prompt">Show Prompt</button>
+    <div class="beforeunload-container">
+        <input type="checkbox" id="chk-beforeunload">
+        <label for="chk-beforeunload">Enable beforeunload</label>
+    </div>
+
+    <!-- Dialog Results -->
+    <div id="alert-result">Alert was shown</div>
+    <div id="confirm-result">Confirm result: -</div>
+    <div id="prompt-result">Prompt result: -</div>
+
+    <!-- File Upload Section -->
+    <span class="file-label file-label-single">Single file:</span>
+    <input type="file" id="file-single">
+
+    <span class="file-label file-label-multiple">Multiple files:</span>
+    <input type="file" id="file-multiple" multiple>
+
+    <span class="file-label file-label-images">Images only:</span>
+    <input type="file" id="file-images" accept="image/*">
+
+    <div id="drop-zone">Drop files here</div>
+
+    <!-- File Selection Display -->
+    <div id="files-selected">No files selected</div>
+    <div id="file-details">File details: -</div>
+
+    <!-- Download Section -->
+    <a href="assets/test-download.pdf" download id="download-link">Download test PDF</a>
+    <button id="btn-download">Programmatic Download</button>
+    <button id="btn-save">Save Text File</button>
+    <div id="download-progress">Downloading... <span id="progress-percent">0%</span></div>
+    <div id="download-complete">Download complete!</div>
+
+    <script>
+        // Dialog handling
+        window.confirmResult = null;
+        window.promptResult = null;
+
+        document.getElementById('btn-alert').addEventListener('click', function() {
+            alert('Test alert message');
+            document.getElementById('alert-result').style.display = 'block';
+        });
+
+        document.getElementById('btn-confirm').addEventListener('click', function() {
+            window.confirmResult = confirm('Confirm this action?');
+            document.getElementById('confirm-result').textContent =
+                'Confirmed: ' + window.confirmResult;
+        });
+
+        document.getElementById('btn-prompt').addEventListener('click', function() {
+            window.promptResult = prompt('Enter your name:', 'Default');
+            if (window.promptResult !== null) {
+                document.getElementById('prompt-result').textContent =
+                    'Entered: ' + window.promptResult;
+            } else {
+                document.getElementById('prompt-result').textContent = 'Cancelled';
+            }
+        });
+
+        // beforeunload handling
+        document.getElementById('chk-beforeunload').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                window.onbeforeunload = function() {
+                    return 'Are you sure you want to leave?';
+                };
+            } else {
+                window.onbeforeunload = null;
+            }
+        });
+
+        // File input handling
+        function updateFileDisplay(files, source) {
+            const selectedDisplay = document.getElementById('files-selected');
+            const detailsDisplay = document.getElementById('file-details');
+
+            if (files.length === 0) {
+                selectedDisplay.textContent = 'No files selected';
+                detailsDisplay.textContent = 'File details: -';
+                return;
+            }
+
+            const fileNames = Array.from(files).map(f => f.name).join('\n');
+            selectedDisplay.textContent = `Selected (${source}):\n${fileNames}`;
+
+            const firstFile = files[0];
+            detailsDisplay.innerHTML = `
+                Name: ${firstFile.name}<br>
+                Size: ${firstFile.size} bytes<br>
+                Type: ${firstFile.type || 'unknown'}
+            `;
+        }
+
+        document.getElementById('file-single').addEventListener('change', function(e) {
+            updateFileDisplay(e.target.files, 'single');
+        });
+
+        document.getElementById('file-multiple').addEventListener('change', function(e) {
+            updateFileDisplay(e.target.files, 'multiple');
+        });
+
+        document.getElementById('file-images').addEventListener('change', function(e) {
+            updateFileDisplay(e.target.files, 'images');
+        });
+
+        // Drop zone handling
+        const dropZone = document.getElementById('drop-zone');
+
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', function(e) {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            updateFileDisplay(e.dataTransfer.files, 'drop');
+        });
+
+        // Programmatic download
+        document.getElementById('btn-download').addEventListener('click', function() {
+            const content = 'This is a programmatically generated file.\nCreated at: ' + new Date().toISOString();
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'programmatic-download.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            document.getElementById('download-complete').style.display = 'block';
+            setTimeout(function() {
+                document.getElementById('download-complete').style.display = 'none';
+            }, 3000);
+        });
+
+        // Save text file
+        document.getElementById('btn-save').addEventListener('click', function() {
+            const content = 'Saved text file content.\nTimestamp: ' + Date.now();
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'saved-file.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        // Expose state for testing
+        window.dialogState = {
+            getConfirmResult: function() { return window.confirmResult; },
+            getPromptResult: function() { return window.promptResult; },
+            wasAlertShown: function() {
+                return document.getElementById('alert-result').style.display === 'block';
+            }
+        };
+    </script>
+</body>
+</html>

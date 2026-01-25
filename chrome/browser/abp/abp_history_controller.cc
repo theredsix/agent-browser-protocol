@@ -990,7 +990,7 @@ void AbpHistoryController::SendJson(int status,
                                     HistoryResponseCallback callback) {
   std::string json;
   base::JSONWriter::Write(value, &json);
-  std::move(callback).Run(status, std::move(json));
+  std::move(callback).Run(status, "application/json", std::move(json));
 }
 
 void AbpHistoryController::SendError(int status,
@@ -1020,19 +1020,10 @@ void AbpHistoryController::SendBinaryFile(const base::FilePath& path,
               error.Set("message", "Screenshot file not found");
               std::string json;
               base::JSONWriter::Write(error, &json);
-              std::move(cb).Run(404, std::move(json));
+              std::move(cb).Run(404, "application/json", std::move(json));
             } else {
-              // For binary content, we need to return it differently
-              // For now, return base64 encoded in JSON
-              base::Value::Dict response;
-              response.Set("success", true);
-              base::Value::Dict data;
-              data.Set("data", base::Base64Encode(content));
-              data.Set("mimeType", content_type);
-              response.Set("data", std::move(data));
-              std::string json;
-              base::JSONWriter::Write(response, &json);
-              std::move(cb).Run(200, std::move(json));
+              // Return raw binary content with appropriate content type
+              std::move(cb).Run(200, content_type, std::move(content));
             }
           },
           std::move(callback), content_type));

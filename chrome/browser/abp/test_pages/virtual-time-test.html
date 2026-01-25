@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Time and Execution Control Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f0f4f8;
+            padding: 20px;
+        }
+        h1 {
+            color: #1a365d;
+            margin-bottom: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #4a5568;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #edf2f7;
+        }
+        .metric:last-child {
+            border-bottom: none;
+        }
+        .metric-label {
+            color: #718096;
+            font-size: 14px;
+        }
+        .metric-value {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        .metric-value.highlight {
+            color: #3182ce;
+        }
+        .metric-value.success {
+            color: #38a169;
+        }
+        .metric-value.warning {
+            color: #d69e2e;
+        }
+
+        /* Animation test */
+        .animation-container {
+            height: 60px;
+            position: relative;
+            background: #edf2f7;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        #animated-box {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px;
+            animation: slideRight 2s ease-in-out infinite alternate;
+        }
+        @keyframes slideRight {
+            0% { left: 0; }
+            100% { left: calc(100% - 40px); }
+        }
+
+        /* Bouncing ball */
+        .bounce-container {
+            height: 100px;
+            position: relative;
+            background: #edf2f7;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        #bouncing-ball {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 30px;
+            background: #e53e3e;
+            border-radius: 50%;
+            animation: bounce 1s ease-in-out infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { top: 10px; }
+            50% { top: 60px; }
+        }
+
+        /* Event log */
+        #event-log {
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            background: #1a202c;
+            color: #a0aec0;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .log-entry {
+            padding: 2px 0;
+        }
+        .log-entry.timer { color: #68d391; }
+        .log-entry.promise { color: #63b3ed; }
+        .log-entry.raf { color: #f6ad55; }
+        .log-entry.event { color: #fc8181; }
+
+        /* Test button */
+        #test-click-btn {
+            margin-top: 10px;
+            padding: 12px 24px;
+            background: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #test-click-btn:hover {
+            background: #3182ce;
+        }
+        #test-click-btn:active {
+            background: #2c5282;
+        }
+
+        /* Status indicator */
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-indicator.running { background: #48bb78; animation: pulse 1s infinite; }
+        .status-indicator.paused { background: #ed8936; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Virtual Time and Execution Control Test</h1>
+
+    <div class="container">
+        <!-- Time Metrics -->
+        <div class="card">
+            <div class="card-title">Time Metrics</div>
+            <div class="metric">
+                <span class="metric-label">Date.now()</span>
+                <span class="metric-value highlight" id="date-now">-</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">performance.now()</span>
+                <span class="metric-value" id="perf-now">-</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Initial Date.now()</span>
+                <span class="metric-value" id="initial-time">-</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Time Elapsed (ms)</span>
+                <span class="metric-value highlight" id="time-elapsed">0</span>
+            </div>
+        </div>
+
+        <!-- Timer Counters -->
+        <div class="card">
+            <div class="card-title">Timer Counters</div>
+            <div class="metric">
+                <span class="metric-label">setInterval (100ms)</span>
+                <span class="metric-value highlight" id="interval-count">0</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">setTimeout chain</span>
+                <span class="metric-value" id="timeout-count">0</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">RAF count</span>
+                <span class="metric-value" id="raf-count">0</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Last RAF timestamp</span>
+                <span class="metric-value" id="raf-timestamp">-</span>
+            </div>
+        </div>
+
+        <!-- Promise/Microtask -->
+        <div class="card">
+            <div class="card-title">Async Operations</div>
+            <div class="metric">
+                <span class="metric-label">Promise.resolve() ran</span>
+                <span class="metric-value" id="promise-ran">false</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">queueMicrotask() ran</span>
+                <span class="metric-value" id="microtask-ran">false</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Pending setTimeout</span>
+                <span class="metric-value" id="pending-timeout">none</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Timeout fired at</span>
+                <span class="metric-value" id="timeout-fired-at">-</span>
+            </div>
+        </div>
+
+        <!-- Event Handling -->
+        <div class="card">
+            <div class="card-title">Event Handling</div>
+            <div class="metric">
+                <span class="metric-label">Click count</span>
+                <span class="metric-value highlight" id="click-count">0</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Last click time</span>
+                <span class="metric-value" id="last-click-time">-</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Mousemove count</span>
+                <span class="metric-value" id="mousemove-count">0</span>
+            </div>
+            <button id="test-click-btn">Click Me</button>
+        </div>
+
+        <!-- Animations -->
+        <div class="card">
+            <div class="card-title">CSS Animations</div>
+            <div class="metric">
+                <span class="metric-label">Sliding box position</span>
+                <span class="metric-value" id="box-position">-</span>
+            </div>
+            <div class="animation-container">
+                <div id="animated-box"></div>
+            </div>
+            <div class="metric" style="margin-top: 15px;">
+                <span class="metric-label">Bouncing ball top</span>
+                <span class="metric-value" id="ball-position">-</span>
+            </div>
+            <div class="bounce-container">
+                <div id="bouncing-ball"></div>
+            </div>
+        </div>
+
+        <!-- Snapshots -->
+        <div class="card">
+            <div class="card-title">Time Snapshots</div>
+            <div class="metric">
+                <span class="metric-label">Snapshot count</span>
+                <span class="metric-value" id="snapshot-count">0</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Last snapshot</span>
+                <span class="metric-value" id="last-snapshot">-</span>
+            </div>
+            <div id="event-log"></div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        const initialTime = Date.now();
+        document.getElementById('initial-time').textContent = initialTime;
+
+        // ============================================
+        // TIME TRACKING
+        // ============================================
+        let intervalCount = 0;
+        let timeoutCount = 0;
+        let rafCount = 0;
+        let clickCount = 0;
+        let mousemoveCount = 0;
+
+        // Store snapshots for comparison
+        window.timeSnapshots = [];
+        window.eventLog = [];
+
+        function logEvent(type, message) {
+            const entry = {
+                time: Date.now(),
+                perfTime: performance.now(),
+                type: type,
+                message: message
+            };
+            window.eventLog.push(entry);
+
+            const logEl = document.getElementById('event-log');
+            const div = document.createElement('div');
+            div.className = 'log-entry ' + type;
+            div.textContent = `[${entry.perfTime.toFixed(1)}] ${type}: ${message}`;
+            logEl.appendChild(div);
+            logEl.scrollTop = logEl.scrollHeight;
+
+            // Keep only last 50 entries
+            while (logEl.children.length > 50) {
+                logEl.removeChild(logEl.firstChild);
+            }
+        }
+
+        // ============================================
+        // SETINTERVAL (100ms)
+        // ============================================
+        setInterval(function() {
+            intervalCount++;
+            document.getElementById('interval-count').textContent = intervalCount;
+            document.getElementById('date-now').textContent = Date.now();
+            document.getElementById('perf-now').textContent = performance.now().toFixed(2);
+            document.getElementById('time-elapsed').textContent = Date.now() - initialTime;
+
+            // Update animation positions
+            const box = document.getElementById('animated-box');
+            const ball = document.getElementById('bouncing-ball');
+            if (box) {
+                document.getElementById('box-position').textContent =
+                    Math.round(box.getBoundingClientRect().left) + 'px';
+            }
+            if (ball) {
+                document.getElementById('ball-position').textContent =
+                    Math.round(ball.getBoundingClientRect().top) + 'px';
+            }
+        }, 100);
+
+        // ============================================
+        // SETTIMEOUT CHAIN
+        // ============================================
+        function scheduleNextTimeout() {
+            setTimeout(function() {
+                timeoutCount++;
+                document.getElementById('timeout-count').textContent = timeoutCount;
+                if (timeoutCount < 1000) {
+                    scheduleNextTimeout();
+                }
+            }, 100);
+        }
+        scheduleNextTimeout();
+
+        // ============================================
+        // REQUESTANIMATIONFRAME
+        // ============================================
+        function rafLoop(timestamp) {
+            rafCount++;
+            document.getElementById('raf-count').textContent = rafCount;
+            document.getElementById('raf-timestamp').textContent = timestamp.toFixed(2);
+            if (rafCount < 10000) {
+                requestAnimationFrame(rafLoop);
+            }
+        }
+        requestAnimationFrame(rafLoop);
+
+        // ============================================
+        // EVENT HANDLERS
+        // ============================================
+        document.getElementById('test-click-btn').addEventListener('click', function(e) {
+            clickCount++;
+            const now = Date.now();
+            document.getElementById('click-count').textContent = clickCount;
+            document.getElementById('last-click-time').textContent = now;
+            logEvent('event', 'Button clicked at ' + now);
+            window.lastClickTime = now;
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            mousemoveCount++;
+            document.getElementById('mousemove-count').textContent = mousemoveCount;
+        });
+
+        // ============================================
+        // TEST HELPERS - Exposed to window for ABP testing
+        // ============================================
+
+        // Record a time snapshot for comparison
+        window.recordSnapshot = function(label) {
+            const snapshot = {
+                label: label || 'snapshot-' + window.timeSnapshots.length,
+                dateNow: Date.now(),
+                perfNow: performance.now(),
+                intervalCount: intervalCount,
+                timeoutCount: timeoutCount,
+                rafCount: rafCount,
+                clickCount: clickCount
+            };
+            window.timeSnapshots.push(snapshot);
+            document.getElementById('snapshot-count').textContent = window.timeSnapshots.length;
+            document.getElementById('last-snapshot').textContent = JSON.stringify(snapshot).substring(0, 50) + '...';
+            logEvent('timer', 'Snapshot: ' + snapshot.label);
+            return snapshot;
+        };
+
+        // Get current time state
+        window.getTimeState = function() {
+            return {
+                dateNow: Date.now(),
+                perfNow: performance.now(),
+                initialTime: initialTime,
+                elapsed: Date.now() - initialTime,
+                intervalCount: intervalCount,
+                timeoutCount: timeoutCount,
+                rafCount: rafCount
+            };
+        };
+
+        // Compare two snapshots
+        window.compareSnapshots = function(idx1, idx2) {
+            const s1 = window.timeSnapshots[idx1];
+            const s2 = window.timeSnapshots[idx2];
+            if (!s1 || !s2) return null;
+            return {
+                dateNowDiff: s2.dateNow - s1.dateNow,
+                perfNowDiff: s2.perfNow - s1.perfNow,
+                intervalDiff: s2.intervalCount - s1.intervalCount,
+                timeoutDiff: s2.timeoutCount - s1.timeoutCount,
+                rafDiff: s2.rafCount - s1.rafCount
+            };
+        };
+
+        // Schedule a test timeout and track it
+        window.scheduleTestTimeout = function(delayMs) {
+            window.testTimeoutFired = false;
+            window.testTimeoutFiredAt = null;
+            document.getElementById('pending-timeout').textContent = delayMs + 'ms';
+            document.getElementById('timeout-fired-at').textContent = 'pending...';
+
+            setTimeout(function() {
+                window.testTimeoutFired = true;
+                window.testTimeoutFiredAt = Date.now();
+                document.getElementById('pending-timeout').textContent = 'fired';
+                document.getElementById('timeout-fired-at').textContent = window.testTimeoutFiredAt;
+                logEvent('timer', 'Test timeout fired after ' + delayMs + 'ms');
+            }, delayMs);
+
+            return { scheduled: Date.now(), delay: delayMs };
+        };
+
+        // Test Promise.resolve behavior
+        window.schedulePromise = function() {
+            window.promiseResolved = false;
+            document.getElementById('promise-ran').textContent = 'pending...';
+
+            Promise.resolve().then(function() {
+                window.promiseResolved = true;
+                window.promiseResolvedAt = Date.now();
+                document.getElementById('promise-ran').textContent = 'true';
+                logEvent('promise', 'Promise resolved at ' + window.promiseResolvedAt);
+            });
+
+            return { scheduled: Date.now() };
+        };
+
+        // Test queueMicrotask behavior
+        window.scheduleMicrotask = function() {
+            window.microtaskRan = false;
+            document.getElementById('microtask-ran').textContent = 'pending...';
+
+            queueMicrotask(function() {
+                window.microtaskRan = true;
+                window.microtaskRanAt = Date.now();
+                document.getElementById('microtask-ran').textContent = 'true';
+                logEvent('promise', 'Microtask ran at ' + window.microtaskRanAt);
+            });
+
+            return { scheduled: Date.now() };
+        };
+
+        // Get animation element positions (for freeze verification)
+        window.getAnimationPositions = function() {
+            const box = document.getElementById('animated-box');
+            const ball = document.getElementById('bouncing-ball');
+            return {
+                boxLeft: box ? box.getBoundingClientRect().left : null,
+                ballTop: ball ? ball.getBoundingClientRect().top : null,
+                timestamp: Date.now()
+            };
+        };
+
+        // Reset all test state
+        window.resetTestState = function() {
+            window.timeSnapshots = [];
+            window.testTimeoutFired = false;
+            window.testTimeoutFiredAt = null;
+            window.promiseResolved = false;
+            window.microtaskRan = false;
+            window.lastClickTime = null;
+            document.getElementById('snapshot-count').textContent = '0';
+            document.getElementById('last-snapshot').textContent = '-';
+            document.getElementById('pending-timeout').textContent = 'none';
+            document.getElementById('timeout-fired-at').textContent = '-';
+            document.getElementById('promise-ran').textContent = 'false';
+            document.getElementById('microtask-ran').textContent = 'false';
+            document.getElementById('event-log').innerHTML = '';
+            window.eventLog = [];
+            logEvent('timer', 'Test state reset');
+            return true;
+        };
+
+        // Comprehensive test state object
+        window.virtualTimeTest = {
+            getTimeState: window.getTimeState,
+            recordSnapshot: window.recordSnapshot,
+            compareSnapshots: window.compareSnapshots,
+            scheduleTestTimeout: window.scheduleTestTimeout,
+            schedulePromise: window.schedulePromise,
+            scheduleMicrotask: window.scheduleMicrotask,
+            getAnimationPositions: window.getAnimationPositions,
+            resetTestState: window.resetTestState,
+            getIntervalCount: function() { return intervalCount; },
+            getTimeoutCount: function() { return timeoutCount; },
+            getRafCount: function() { return rafCount; },
+            getClickCount: function() { return clickCount; },
+            getSnapshots: function() { return window.timeSnapshots; },
+            getEventLog: function() { return window.eventLog; }
+        };
+
+        // Log initial state
+        logEvent('timer', 'Page initialized at ' + initialTime);
+    </script>
+</body>
+</html>

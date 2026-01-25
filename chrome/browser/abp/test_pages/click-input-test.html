@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click and Input Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+        .section {
+            margin: 10px;
+            padding: 10px;
+            background: white;
+            border: 1px solid #ddd;
+        }
+        .section-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        /* Click targets - fixed positions */
+        #btn-fixed {
+            position: absolute;
+            left: 50px;
+            top: 80px;
+            width: 100px;
+            height: 40px;
+            cursor: pointer;
+        }
+        #btn-fixed:active {
+            background: #0056b3;
+        }
+        #click-count {
+            position: absolute;
+            left: 160px;
+            top: 90px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        #right-click-target {
+            position: absolute;
+            left: 250px;
+            top: 80px;
+            width: 100px;
+            height: 40px;
+            background: #28a745;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: context-menu;
+        }
+        #context-menu-shown {
+            position: absolute;
+            left: 360px;
+            top: 90px;
+            color: green;
+            font-weight: bold;
+            display: none;
+        }
+        #double-click-target {
+            position: absolute;
+            left: 450px;
+            top: 80px;
+            width: 100px;
+            height: 40px;
+            background: #ffc107;
+            color: black;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        #double-click-count {
+            position: absolute;
+            left: 560px;
+            top: 90px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        /* Text input section */
+        #text-input {
+            position: absolute;
+            left: 50px;
+            top: 180px;
+            width: 200px;
+            height: 30px;
+            padding: 5px;
+        }
+        #text-area {
+            position: absolute;
+            left: 50px;
+            top: 280px;
+            width: 300px;
+            height: 100px;
+            padding: 5px;
+        }
+        #password-input {
+            position: absolute;
+            left: 50px;
+            top: 400px;
+            width: 200px;
+            height: 30px;
+            padding: 5px;
+        }
+        #readonly-input {
+            position: absolute;
+            left: 280px;
+            top: 180px;
+            width: 150px;
+            height: 30px;
+            padding: 5px;
+            background: #e9ecef;
+        }
+        #disabled-input {
+            position: absolute;
+            left: 280px;
+            top: 280px;
+            width: 150px;
+            height: 30px;
+            padding: 5px;
+        }
+
+        /* Keyboard events section */
+        #key-event-input {
+            position: absolute;
+            left: 500px;
+            top: 180px;
+            width: 200px;
+            height: 30px;
+            padding: 5px;
+        }
+        #last-key-event {
+            position: absolute;
+            left: 500px;
+            top: 220px;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 300px;
+            word-wrap: break-word;
+        }
+        #modifier-state {
+            position: absolute;
+            left: 500px;
+            top: 280px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        /* Form section */
+        #test-form {
+            position: absolute;
+            left: 50px;
+            top: 480px;
+        }
+        #test-form input[name="username"] {
+            width: 200px;
+            height: 30px;
+            padding: 5px;
+            margin-bottom: 10px;
+            display: block;
+        }
+        #test-form input[name="password"] {
+            width: 200px;
+            height: 30px;
+            padding: 5px;
+            margin-bottom: 10px;
+            display: block;
+        }
+        #submit-btn {
+            width: 100px;
+            height: 35px;
+            cursor: pointer;
+        }
+        #form-submitted {
+            position: absolute;
+            left: 280px;
+            top: 530px;
+            color: green;
+            font-weight: bold;
+            font-size: 18px;
+            display: none;
+        }
+
+        /* Mouse coordinates display */
+        #mouse-coords {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            border-radius: 4px;
+            z-index: 1000;
+        }
+
+        /* Labels */
+        .label {
+            position: absolute;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <!-- Section Labels -->
+    <div class="label" style="left: 50px; top: 50px; font-weight: bold; font-size: 14px;">Click Targets</div>
+    <div class="label" style="left: 50px; top: 150px; font-weight: bold; font-size: 14px;">Text Inputs</div>
+    <div class="label" style="left: 500px; top: 150px; font-weight: bold; font-size: 14px;">Keyboard Events</div>
+    <div class="label" style="left: 50px; top: 450px; font-weight: bold; font-size: 14px;">Form</div>
+
+    <!-- Click Targets -->
+    <button id="btn-fixed">Click Me</button>
+    <span id="click-count">0</span>
+
+    <div id="right-click-target">Right Click</div>
+    <span id="context-menu-shown">Context Menu!</span>
+
+    <div id="double-click-target">Double Click</div>
+    <span id="double-click-count">0</span>
+
+    <!-- Text Inputs -->
+    <input type="text" id="text-input" placeholder="Type here">
+    <textarea id="text-area" rows="5" cols="40" placeholder="Textarea - type multiline text"></textarea>
+    <input type="password" id="password-input" placeholder="Password">
+    <input type="text" id="readonly-input" value="Cannot edit" readonly>
+    <input type="text" id="disabled-input" value="Disabled" disabled>
+
+    <!-- Keyboard Events -->
+    <input type="text" id="key-event-input" placeholder="Key events here">
+    <div id="last-key-event">Last key event: none</div>
+    <div id="modifier-state">Shift: false | Ctrl: false | Alt: false | Meta: false</div>
+
+    <!-- Form -->
+    <form id="test-form">
+        <input type="text" name="username" placeholder="Username">
+        <input type="password" name="password" placeholder="Password">
+        <button type="submit" id="submit-btn">Submit</button>
+    </form>
+    <div id="form-submitted">Form Submitted!</div>
+
+    <!-- Mouse Coordinates -->
+    <div id="mouse-coords">Mouse: (0, 0)</div>
+
+    <script>
+        // Store last click event for modifier testing
+        window.lastClickEvent = null;
+        window.lastFormData = null;
+
+        // Click counter
+        let clickCount = 0;
+        document.getElementById('btn-fixed').addEventListener('click', function(e) {
+            clickCount++;
+            document.getElementById('click-count').textContent = clickCount;
+            window.lastClickEvent = {
+                x: e.clientX,
+                y: e.clientY,
+                button: e.button,
+                shiftKey: e.shiftKey,
+                ctrlKey: e.ctrlKey,
+                altKey: e.altKey,
+                metaKey: e.metaKey
+            };
+        });
+
+        // Right-click handling
+        document.getElementById('right-click-target').addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            document.getElementById('context-menu-shown').style.display = 'inline';
+            window.lastClickEvent = {
+                x: e.clientX,
+                y: e.clientY,
+                button: e.button,
+                shiftKey: e.shiftKey,
+                ctrlKey: e.ctrlKey,
+                altKey: e.altKey,
+                metaKey: e.metaKey
+            };
+        });
+
+        // Double-click handling
+        let doubleClickCount = 0;
+        document.getElementById('double-click-target').addEventListener('dblclick', function(e) {
+            doubleClickCount++;
+            document.getElementById('double-click-count').textContent = doubleClickCount;
+        });
+
+        // Key event tracking
+        const keyEventInput = document.getElementById('key-event-input');
+        const lastKeyEventDisplay = document.getElementById('last-key-event');
+        const modifierStateDisplay = document.getElementById('modifier-state');
+
+        function updateModifierState(e) {
+            modifierStateDisplay.textContent =
+                `Shift: ${e.shiftKey} | Ctrl: ${e.ctrlKey} | Alt: ${e.altKey} | Meta: ${e.metaKey}`;
+        }
+
+        function updateKeyEvent(e) {
+            const eventData = {
+                type: e.type,
+                key: e.key,
+                code: e.code,
+                keyCode: e.keyCode,
+                shiftKey: e.shiftKey,
+                ctrlKey: e.ctrlKey,
+                altKey: e.altKey,
+                metaKey: e.metaKey
+            };
+            lastKeyEventDisplay.textContent = 'Last key event: ' + JSON.stringify(eventData);
+            window.lastKeyEvent = eventData;
+        }
+
+        document.addEventListener('keydown', function(e) {
+            updateModifierState(e);
+            updateKeyEvent(e);
+        });
+
+        document.addEventListener('keyup', function(e) {
+            updateModifierState(e);
+            updateKeyEvent(e);
+        });
+
+        keyEventInput.addEventListener('keydown', updateKeyEvent);
+        keyEventInput.addEventListener('keyup', updateKeyEvent);
+
+        // Form submission handling
+        document.getElementById('test-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            window.lastFormData = {
+                username: formData.get('username'),
+                password: formData.get('password')
+            };
+            document.getElementById('form-submitted').style.display = 'block';
+        });
+
+        // Explicit Enter key handling for form submission
+        // (CDP's dispatchKeyEvent doesn't trigger implicit form submission,
+        // so we add explicit handlers like many modern web apps do)
+        const formInputs = document.querySelectorAll('#test-form input');
+        formInputs.forEach(function(input) {
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    document.getElementById('test-form').requestSubmit();
+                }
+            });
+        });
+
+        // Mouse coordinates tracking
+        document.addEventListener('mousemove', function(e) {
+            document.getElementById('mouse-coords').textContent =
+                `Mouse: (${e.clientX}, ${e.clientY})`;
+        });
+    </script>
+</body>
+</html>

@@ -123,6 +123,13 @@ First build: ~4-6 hours. Incremental builds: seconds to minutes.
 ### Start Chrome with ABP Enabled
 
 ```bash
+./out/Default/chrome --enable-abp --abp-session-dir=sessions/$(date +%Y%m%d_%H%M%S)
+```
+
+Session data (database and screenshots) will be stored in `sessions/<timestamp>/`.
+
+To use the default `/tmp/abp-<UUID>/` directory instead:
+```bash
 ./out/Default/chrome --enable-abp
 ```
 

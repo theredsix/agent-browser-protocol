@@ -9,6 +9,7 @@
 namespace abp {
 
 class AbpController;
+class AbpDownloadObserver;
 class AbpEventObserver;
 class AbpHistoryController;
 
@@ -50,6 +51,7 @@ class AbpHttpServer : public net::HttpServer::Delegate {
                          std::string body);
   void OnResponseReady(int connection_id,
                        int status_code,
+                       const std::string& content_type,
                        std::string body);
 
   // Poll for browser readiness and center cursor when ready
@@ -61,6 +63,7 @@ class AbpHttpServer : public net::HttpServer::Delegate {
   std::unique_ptr<AbpController> controller_;  // UI thread only
   std::unique_ptr<AbpHistoryController> history_controller_;  // UI thread only
   std::unique_ptr<AbpEventObserver> event_observer_;  // UI thread only
+  std::unique_ptr<AbpDownloadObserver> download_observer_;  // UI thread only
 };
 
 }  // namespace abp

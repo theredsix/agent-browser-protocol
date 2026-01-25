@@ -15,8 +15,11 @@
 namespace abp {
 
 // Response callback type (same as AbpController)
+// content_type: "application/json" for JSON, "image/webp" for binary
 using HistoryResponseCallback =
-    base::OnceCallback<void(int status, std::string body)>;
+    base::OnceCallback<void(int status,
+                            const std::string& content_type,
+                            std::string body)>;
 
 // Controller for ABP history system.
 // Manages session lifecycle, records actions/events, and handles REST requests.

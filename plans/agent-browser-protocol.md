@@ -100,11 +100,9 @@ Engine-level keyboard input injection replicating all human keyboard actions.
 
 ### 6. Content Controller (`//components/abp_server/controllers/content_controller`)
 
-Page content extraction and JavaScript execution.
+JavaScript execution for reading page state.
 
-- Get page HTML/text/title/URL
 - Execute JavaScript expressions and retrieve results
-- Wait conditions (navigation, network idle)
 
 Note: JavaScript execution is for reading state/extracting data. All interactions remain coordinate-based.
 
@@ -114,18 +112,9 @@ Visual capture at the engine level.
 
 - Full viewport screenshot
 - Full page screenshot (scrolled)
-- Region screenshot
-- Multiple formats (PNG, JPEG, WebP)
+- WebP format at quality 80
 
-### 8. Network Controller (`//components/abp_server/controllers/network_controller`)
-
-Network interception and monitoring.
-
-- Request logging
-- Request interception (pause, continue, fulfill, abort)
-- Cookie management (get, set, delete)
-
-### 9. Dialog Controller (`//components/abp_server/controllers/dialog_controller`)
+### 8. Dialog Controller (`//components/abp_server/controllers/dialog_controller`)
 
 Handle browser dialogs (alert, confirm, prompt).
 
@@ -133,25 +122,24 @@ Handle browser dialogs (alert, confirm, prompt).
 - Accept/dismiss dialogs
 - Provide prompt input
 
-### 10. Download Controller (`//components/abp_server/controllers/download_controller`)
+### 9. Download Controller (`//components/abp_server/controllers/download_controller`)
 
-Manage file downloads at the engine level.
+Read-only access to download status. Configuration via ABP config at launch.
 
-- Configure download path and behavior
-- List and monitor downloads
-- Wait for download completion
-- Cancel/resume downloads
+- List downloads with filtering by state
+- Get download status by ID
+- Cancel in-progress downloads
 
-### 11. File Chooser Controller (`//components/abp_server/controllers/file_chooser_controller`)
+### 10. File Chooser Handler
 
-Handle native OS file picker dialogs automatically.
+File chooser dialogs are tracked with unique IDs and handled via a dedicated endpoint.
 
-- Pre-configure files for open dialogs
-- Set save paths for save dialogs
-- Auto-select mode for seamless file operations
-- Cancel pending file choosers
+- Actions that trigger file choosers return a `file_chooser` event with unique `id`
+- Use `POST /file-chooser/{id}` to provide files or cancel the dialog
+- Events include `file_chooser`, `file_selected`, and `file_chooser_cancelled`
+- Default behavior (auto-accept) can be configured via ABP config at launch
 
-### 12. Event Collector (`//components/abp_server/event_collector`)
+### 11. Event Collector (`//components/abp_server/event_collector`)
 
 Captures browser events during action execution for response envelope.
 
@@ -161,12 +149,11 @@ Captures browser events during action execution for response envelope.
 - Track download start/completion
 - Buffer events between action start and wait completion
 
-### 13. Wait Controller (`//components/abp_server/wait_controller`)
+### 12. Wait Controller (`//components/abp_server/wait_controller`)
 
 Implements wait_until semantics for action completion detection.
 
 - `action_complete` heuristic using engine signals
-- `network_idle` monitoring via network stack
 - Timeout handling
 - Rendering quiescence detection via compositor
 
@@ -175,9 +162,12 @@ Implements wait_until semantics for action completion detection.
 All action endpoints return a standard envelope containing:
 
 1. **Result**: Action-specific return data
-2. **Screenshot**: Compressed WebP image of viewport after wait completion
-3. **Events**: Array of browser events that occurred between action and wait
-4. **Timing**: Performance metrics for the action
+2. **Screenshot**: Compressed WebP image with `virtual_time_ms` (frozen page time)
+3. **Scroll**: Current scroll position after wait completion
+4. **Events**: Array of browser events with `virtual_time_ms` timestamps
+5. **Timing**: Performance metrics for the action
+
+Note: All timestamps use `virtual_time_ms` (virtual time in milliseconds since epoch). Since execution is paused between actions, this reflects the frozen page time rather than wall clock time.
 
 ### Wait Until Semantics
 
@@ -187,7 +177,6 @@ Actions accept a `wait_until` parameter controlling when to capture the response
 |------|-------------|
 | `immediate` | Return right after action dispatch |
 | `action_complete` | Wait for rendering/navigation lull (default) |
-| `network_idle` | Wait for network quiescence |
 | `time` | Fixed duration wait |
 
 The `action_complete` heuristic monitors:
@@ -201,15 +190,15 @@ The `action_complete` heuristic monitors:
 Events captured during wait period inform agents of side effects:
 
 - **navigation**: Page navigated to new URL
-- **dialog**: Alert/confirm/prompt appeared
-- **file_chooser**: Native file picker opened
-- **file_selected**: Files were selected in file chooser
-- **file_chooser_cancelled**: File chooser dismissed without selection
+- **dialog**: Alert/confirm/prompt appeared (includes dialog ID)
+- **file_chooser**: Native file picker opened (includes `id` for `POST /file-chooser/{id}`)
+- **file_selected**: Files were selected in file chooser (includes `id`)
+- **file_chooser_cancelled**: File chooser dismissed without selection (includes `id`)
 - **popup**: New window/tab opened
 - **tab_closed**: Tab was closed
 - **scroll**: Page was scrolled (includes delta, final position, source)
-- **download_started**: Download initiated
-- **download_completed**: Download finished successfully
+- **download_started**: Download initiated (includes `download_id`)
+- **download_completed**: Download finished successfully (includes `download_id`)
 
 ### Scroll Position
 
@@ -243,116 +232,91 @@ Rate limiting and request size limits to prevent resource exhaustion.
 ```
 --enable-abp                    Enable Agent Browser Protocol server
 --abp-port=8222                 Port for ABP server (default: 8222)
---abp-auth-token=<token>        Require bearer token authentication
---abp-allow-remote              Allow non-localhost connections
---abp-cors-origin=<origin>      Set allowed CORS origin
+--abp-session-dir=<path>        Session directory for screenshots, database, logs
+--abp-disable-pause             Disable execution control (Debugger.pause + virtual time)
+--allow-system-inputs           Allow system input when ABP is enabled (blocked by default)
+```
+
+## ABP Configuration
+
+Window sizing and download behavior are configured via the ABP config file (`--abp-config` or `~/.config/chromium/abp_config.json`):
+
+```json
+{
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "x": 0,
+    "y": 0
+  },
+  "downloads": {
+    "path": "/tmp/downloads",
+    "auto_accept": true
+  },
+  "file_chooser": {
+    "default_files": [],
+    "default_save_path": "/tmp/saves"
+  }
+}
 ```
 
 ## Implementation Phases
 
-### Phase 1: Foundation
-- [ ] Embedded HTTP server infrastructure
-- [ ] Tab controller (create, close, list, switch, info)
-- [ ] Basic navigation (URL, back, forward, reload)
-- [ ] Screenshot capture
+### Phase 1: Foundation ✅
+- [x] Embedded HTTP server infrastructure
+- [x] Tab controller (create, close, list, info)
+- [x] Basic navigation (URL, back, forward, reload)
+- [x] Screenshot capture
 
-### Phase 2: Human Input
-- [ ] Mouse controller (click, move, scroll, drag)
-- [ ] Keyboard controller (type, press, shortcuts)
-- [ ] Input modifiers and combinations
+### Phase 2: Human Input (in progress)
+- [x] Mouse click
+- [x] Mouse move with virtual cursor
+- [ ] Mouse scroll
+- [x] Keyboard type
+- [ ] Keyboard press, down, up
+- [ ] Tab activate (switch)
 
-### Phase 3: DOM & Content
-- [ ] DOM querying and element info
-- [ ] Element interactions (click, type, focus)
-- [ ] Content extraction (HTML, text)
-- [ ] JavaScript evaluation
+### Phase 3: Content & Execution ✅
+- [x] JavaScript evaluation
+- [x] Execution control (pause/resume)
+- [x] Virtual time management
 
-### Phase 4: Network & Dialogs
-- [ ] Network request monitoring
-- [ ] Request/response interception
-- [ ] Cookie management
-- [ ] Dialog handling
+### Phase 4: Dialogs & Downloads
+- [ ] Dialog handling (get, accept, dismiss)
+- [ ] Download status (list, get, cancel)
+- [ ] File chooser integration in actions
 
-### Phase 5: Downloads & File Chooser
-- [ ] Download configuration and management
-- [ ] Download monitoring and wait conditions
-- [ ] Native file chooser interception
-- [ ] Auto-select mode for file dialogs
+### Phase 5: History & Debugging ✅
+- [x] Action recording with before/after screenshots
+- [x] SQLite history database
+- [x] Session directory management
 
-### Phase 6: Advanced
-- [ ] Wait conditions
-- [ ] Window management
-- [ ] Performance metrics
-
-## File Structure
+## File Structure (Actual Implementation)
 
 ```
-//components/abp_server/
+chrome/browser/abp/
 ├── BUILD.gn
-├── abp_server.h
-├── abp_server.cc
-├── http_server/
-│   ├── http_server.h
-│   ├── http_server.cc
-│   ├── request_handler.h
-│   ├── request_parser.h
-│   └── response_builder.h
-├── controllers/
-│   ├── browser_controller.h
-│   ├── browser_controller.cc
-│   ├── tab_controller.h
-│   ├── tab_controller.cc
-│   ├── mouse_controller.h
-│   ├── mouse_controller.cc
-│   ├── keyboard_controller.h
-│   ├── keyboard_controller.cc
-│   ├── content_controller.h
-│   ├── content_controller.cc
-│   ├── screenshot_controller.h
-│   ├── screenshot_controller.cc
-│   ├── network_controller.h
-│   ├── network_controller.cc
-│   ├── dialog_controller.h
-│   ├── dialog_controller.cc
-│   ├── download_controller.h
-│   ├── download_controller.cc
-│   ├── file_chooser_controller.h
-│   └── file_chooser_controller.cc
-├── event_collector/
-│   ├── event_collector.h
-│   ├── event_collector.cc
-│   ├── event_types.h
-│   └── event_buffer.h
-├── wait_controller/
-│   ├── wait_controller.h
-│   ├── wait_controller.cc
-│   ├── action_complete_detector.h
-│   ├── action_complete_detector.cc
-│   └── network_idle_detector.h
-└── util/
-    ├── json_util.h
-    ├── json_util.cc
-    ├── response_builder.h
-    └── response_builder.cc
+├── abp_switches.h/cc            # Command line flags
+├── abp_config.h/cc              # Configuration handling
+├── abp_http_server.h/cc         # HTTP server (IO thread)
+├── abp_controller.h/cc          # Request handler + CDP client (UI thread)
+├── abp_history_controller.h/cc  # Action recording
+├── abp_history_database.h/cc    # SQLite storage
+├── abp_event_observer.h/cc      # Browser event monitoring
+├── abp_mouse_tracker.h/cc       # Virtual cursor state
+└── abp_action_context.h/cc      # Action flow management
 ```
 
 ## Dependencies
 
 - `//net` - Network stack for HTTP server
 - `//content/public/browser` - Browser-side content APIs
-- `//third_party/blink/public` - Renderer interfaces
-- `//components/download` - Download management
 - `//ui/gfx` - Graphics/screenshot utilities
-- `//ui/events` - Input event generation
-- `//ui/shell_dialogs` - File chooser dialog handling
-- `//cc` - Compositor for rendering quiescence detection
 - `//third_party/libwebp` - WebP screenshot compression
+- `//sql` - SQLite for history database
 - `//base` - Base utilities and threading
 
 ## Related Documents
 
 - [API.md](./API.md) - Complete REST API specification
 - [mcp.md](./mcp.md) - MCP server for AI agent integration
-- [HTTP Server Implementation](./http-server-implementation.md) (TODO)
-- [Input Injection Design](./input-injection-design.md) (TODO)
-- [DOM Access Architecture](./dom-access-architecture.md) (TODO)

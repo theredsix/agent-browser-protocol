@@ -10,6 +10,10 @@ namespace abp {
 // Configuration for ABP history system.
 // Loaded from ~/.config/chromium/abp_config.json or --abp-config flag.
 struct AbpConfig {
+  // Session directory - stores database, screenshots, and logs
+  // Default: /tmp/abp-<UUID>
+  base::FilePath session_dir;
+
   struct HistoryConfig {
     bool enabled = true;
     base::FilePath database_path;
@@ -22,8 +26,11 @@ struct AbpConfig {
   };
   HistoryConfig history;
 
-  // Returns the default configuration
+  // Returns the default configuration with a new UUID-based session directory
   static AbpConfig GetDefaults();
+
+  // Returns configuration with a specific session directory
+  static AbpConfig GetDefaultsWithSessionDir(const base::FilePath& session_dir);
 };
 
 // Loads configuration from file or returns defaults.

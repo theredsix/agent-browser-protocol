@@ -15,6 +15,13 @@ extern const char kAbpConfig[];
 // Allow system input even when ABP is enabled (ABP blocks system input by default)
 extern const char kAllowSystemInputs[];
 
+// Disable execution control (Debugger.pause + virtual time) - enabled by default
+extern const char kAbpDisablePause[];
+
+// Session directory for storing screenshots, database, and logs
+// Default: /tmp/abp-<UUID>
+extern const char kAbpSessionDir[];
+
 }  // namespace abp::switches
 
 #endif  // CHROME_BROWSER_ABP_ABP_SWITCHES_H_

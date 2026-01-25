@@ -93,7 +93,6 @@ Control virtual cursor visibility in screenshots. The virtual cursor is automati
 |------|-------------|
 | `immediate` | Return immediately after dispatching the action |
 | `action_complete` | Wait for engine rendering/navigation lull after action (default) |
-| `network_idle` | Wait until no network activity for `idle_time_ms` (default: 500ms) |
 | `time` | Wait for a fixed duration specified by `duration_ms` |
 
 ### Wait Until Parameters
@@ -103,7 +102,6 @@ Control virtual cursor visibility in screenshots. The virtual cursor is automati
   "wait_until": {
     "type": "action_complete",
     "timeout_ms": 30000,
-    "idle_time_ms": 500,
     "duration_ms": 1000
   }
 }
@@ -113,7 +111,6 @@ Control virtual cursor visibility in screenshots. The virtual cursor is automati
 |-----------|------|---------|-------------|
 | `type` | string | `action_complete` | Wait condition type |
 | `timeout_ms` | number | 30000 | Maximum time to wait before returning |
-| `idle_time_ms` | number | 500 | Idle duration for `network_idle` type |
 | `duration_ms` | number | - | Fixed wait for `time` type |
 
 ### Action Complete Heuristic
@@ -133,68 +130,36 @@ All action responses include a screenshot, scroll position, and event log:
 
 ```json
 {
-  "success": true,
-  "data": {
-    "result": { ... },
-    "screenshot": {
-      "data": "base64-encoded-webp-image",
-      "width": 1920,
-      "height": 1080,
-      "timestamp": 1699999999999,
-      "markup": "interactive",
-      "marked_elements": [
-        {
-          "index": 0,
-          "type": "button",
-          "bounds": {"x": 100, "y": 200, "width": 80, "height": 32},
-          "center": {"x": 140, "y": 216},
-          "text": "Submit",
-          "tag": "button",
-          "role": "button"
-        },
-        {
-          "index": 1,
-          "type": "link",
-          "bounds": {"x": 50, "y": 300, "width": 120, "height": 20},
-          "center": {"x": 110, "y": 310},
-          "text": "Learn more",
-          "tag": "a",
-          "href": "https://example.com/learn"
-        },
-        {
-          "index": 2,
-          "type": "input",
-          "bounds": {"x": 200, "y": 150, "width": 250, "height": 36},
-          "center": {"x": 325, "y": 168},
-          "tag": "input",
-          "input_type": "email",
-          "placeholder": "Enter email"
-        }
-      ]
-    },
-    "scroll": {
-      "horizontal_percent": 0,
-      "vertical_percent": 25.5,
-      "horizontal_px": 0,
-      "vertical_px": 1200,
-      "page_width": 1920,
-      "page_height": 4700,
-      "viewport_width": 1920,
-      "viewport_height": 1080
-    },
-    "events": [
-      {
-        "type": "navigation",
-        "timestamp": 1699999999100,
-        "data": { ... }
-      }
-    ],
-    "timing": {
-      "action_started": 1699999999000,
-      "action_completed": 1699999999050,
-      "wait_completed": 1699999999500,
-      "total_ms": 500
+  "result": { ... },
+  "screenshot": {
+    "data": "base64-encoded-webp-image",
+    "width": 1920,
+    "height": 1080,
+    "virtual_time_ms": 1699999999999,
+    "format": "webp"
+  },
+  "scroll": {
+    "horizontal_percent": 0,
+    "vertical_percent": 25.5,
+    "horizontal_px": 0,
+    "vertical_px": 1200,
+    "page_width": 1920,
+    "page_height": 4700,
+    "viewport_width": 1920,
+    "viewport_height": 1080
+  },
+  "events": [
+    {
+      "type": "navigation",
+      "virtual_time_ms": 1699999999100,
+      "data": { ... }
     }
+  ],
+  "timing": {
+    "action_started_ms": 1699999999000,
+    "action_completed_ms": 1699999999050,
+    "wait_completed_ms": 1699999999500,
+    "duration_ms": 500
   }
 }
 ```
@@ -206,26 +171,10 @@ All action responses include a screenshot, scroll position, and event log:
 | `data` | string | Base64-encoded WebP image |
 | `width` | number | Image width in pixels |
 | `height` | number | Image height in pixels |
-| `timestamp` | number | Capture timestamp |
-| `markup` | string | Markup mode used (`none`, `interactive`, etc.) |
-| `marked_elements` | array | Elements marked in screenshot (when markup enabled) |
+| `virtual_time_ms` | number | Virtual time when screenshot was captured (ms since epoch). Since execution is paused between actions, this reflects the frozen page time. |
+| `format` | string | Image format (`webp`) |
 
-### Marked Elements
-
-When `screenshot.markup` is not `none`, the response includes `marked_elements` array with clickable coordinates:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `index` | number | Element index (matches label on screenshot) |
-| `type` | string | Element type: `button`, `link`, `input`, `textarea`, `select`, `checkbox`, `radio` |
-| `bounds` | object | Bounding box `{x, y, width, height}` |
-| `center` | object | Center point `{x, y}` - use for clicking |
-| `text` | string | Visible text content (if any) |
-| `tag` | string | HTML tag name |
-| `role` | string | ARIA role (if any) |
-| `input_type` | string | Input type for `<input>` elements |
-| `placeholder` | string | Placeholder text (if any) |
-| `href` | string | Link URL for `<a>` elements |
+Note: When `markup` is enabled, elements are visually marked on the screenshot image itself. The agent uses the visual markers to identify click targets.
 
 ### Scroll Position
 
@@ -252,7 +201,7 @@ Tab navigated to a new URL.
 ```json
 {
   "type": "navigation",
-  "timestamp": 1699999999100,
+  "virtual_time_ms": 1699999999100,
   "data": {
     "tab_id": "tab_abc123",
     "url": "https://example.com/page",
@@ -269,7 +218,7 @@ Browser dialog appeared (alert, confirm, prompt).
 ```json
 {
   "type": "dialog",
-  "timestamp": 1699999999200,
+  "virtual_time_ms": 1699999999200,
   "data": {
     "tab_id": "tab_abc123",
     "dialog_type": "confirm",
@@ -283,13 +232,14 @@ Browser dialog appeared (alert, confirm, prompt).
 **dialog_type values:** `alert`, `confirm`, `prompt`, `beforeunload`
 
 #### `file_chooser`
-Native file picker dialog appeared.
+Native file picker dialog appeared. Use the `id` to provide files via `POST /file-chooser/{id}`.
 
 ```json
 {
   "type": "file_chooser",
-  "timestamp": 1699999999300,
+  "virtual_time_ms": 1699999999300,
   "data": {
+    "id": "fc_abc123",
     "tab_id": "tab_abc123",
     "chooser_type": "open",
     "accepts": [{"description": "Images", "extensions": ["jpg", "png"]}],
@@ -307,7 +257,7 @@ New popup window or tab opened.
 ```json
 {
   "type": "popup",
-  "timestamp": 1699999999400,
+  "virtual_time_ms": 1699999999400,
   "data": {
     "source_tab_id": "tab_abc123",
     "new_tab_id": "tab_xyz789",
@@ -325,7 +275,7 @@ Tab was closed.
 ```json
 {
   "type": "tab_closed",
-  "timestamp": 1699999999500,
+  "virtual_time_ms": 1699999999500,
   "data": {
     "tab_id": "tab_abc123",
     "reason": "script"
@@ -341,7 +291,7 @@ Page was scrolled.
 ```json
 {
   "type": "scroll",
-  "timestamp": 1699999999550,
+  "virtual_time_ms": 1699999999550,
   "data": {
     "tab_id": "tab_abc123",
     "delta": {
@@ -370,7 +320,7 @@ Download was initiated.
 ```json
 {
   "type": "download_started",
-  "timestamp": 1699999999600,
+  "virtual_time_ms": 1699999999600,
   "data": {
     "download_id": "dl_123",
     "url": "https://example.com/file.pdf",
@@ -387,7 +337,7 @@ Download finished successfully.
 ```json
 {
   "type": "download_completed",
-  "timestamp": 1699999999900,
+  "virtual_time_ms": 1699999999900,
   "data": {
     "download_id": "dl_123",
     "path": "/downloads/file.pdf",
@@ -404,8 +354,9 @@ Files were selected in a file chooser dialog.
 ```json
 {
   "type": "file_selected",
-  "timestamp": 1699999999700,
+  "virtual_time_ms": 1699999999700,
   "data": {
+    "id": "fc_abc123",
     "tab_id": "tab_abc123",
     "chooser_type": "open",
     "files": ["/path/to/document.pdf", "/path/to/image.png"]
@@ -417,8 +368,9 @@ For save dialogs:
 ```json
 {
   "type": "file_selected",
-  "timestamp": 1699999999700,
+  "virtual_time_ms": 1699999999700,
   "data": {
+    "id": "fc_abc123",
     "tab_id": "tab_abc123",
     "chooser_type": "save",
     "path": "/path/to/output.pdf"
@@ -432,8 +384,9 @@ File chooser was dismissed without selection.
 ```json
 {
   "type": "file_chooser_cancelled",
-  "timestamp": 1699999999800,
+  "virtual_time_ms": 1699999999800,
   "data": {
+    "id": "fc_abc123",
     "tab_id": "tab_abc123",
     "chooser_type": "open"
   }
@@ -466,13 +419,16 @@ Control screenshot capture via the `screenshot` object in the request body:
 
 ## Query Response Format (GET endpoints)
 
-GET endpoints return data without screenshot/events (status queries):
+GET endpoints return data directly without the action envelope (no screenshot/events):
 
 ```json
-{
-  "success": true,
-  "data": { ... }
-}
+{ ... }
+```
+
+For list endpoints, arrays are returned directly:
+
+```json
+[ ... ]
 ```
 
 ---
@@ -481,49 +437,18 @@ GET endpoints return data without screenshot/events (status queries):
 
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human readable message",
-    "details": { ... }
-  },
-  "screenshot": {
-    "data": "base64-encoded-webp-image",
-    "width": 1920,
-    "height": 1080,
-    "timestamp": 1699999999999
-  },
-  "events": [ ... ]
+  "error": "Human readable error message"
 }
 ```
 
-Note: Even on error, screenshot and events are included to aid debugging.
+HTTP status codes indicate error type:
+- `400` - Bad request (invalid parameters)
+- `404` - Resource not found (tab, download, etc.)
+- `500` - Internal server error
 
 ---
 
 ## Browser Management
-
-### Get Browser Info
-
-```
-GET /browser
-```
-
-Returns browser version and status information.
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "browser": "ABP-Chromium",
-    "version": "120.0.0.0",
-    "user_agent": "Mozilla/5.0 ...",
-    "abp_version": "1.0.0",
-    "uptime_ms": 34521
-  }
-}
-```
 
 ### Get Browser Status
 
@@ -536,52 +461,43 @@ Returns initialization status. Poll this endpoint to wait for ABP to be ready af
 **Response (initializing):**
 ```json
 {
-  "success": true,
-  "data": {
-    "ready": false,
-    "state": "initializing",
-    "components": {
-      "http_server": true,
-      "browser_window": false,
-      "devtools": false
-    },
-    "message": "Waiting for browser window"
-  }
+  "ready": false,
+  "state": "initializing",
+  "components": {
+    "http_server": true,
+    "browser_window": false,
+    "devtools": false
+  },
+  "message": "Waiting for browser window"
 }
 ```
 
 **Response (ready):**
 ```json
 {
-  "success": true,
-  "data": {
-    "ready": true,
-    "state": "ready",
-    "components": {
-      "http_server": true,
-      "browser_window": true,
-      "devtools": true
-    },
-    "uptime_ms": 1234
-  }
+  "ready": true,
+  "state": "ready",
+  "components": {
+    "http_server": true,
+    "browser_window": true,
+    "devtools": true
+  },
+  "uptime_ms": 1234
 }
 ```
 
 **Response (error):**
 ```json
 {
-  "success": true,
-  "data": {
-    "ready": false,
-    "state": "error",
-    "components": {
-      "http_server": true,
-      "browser_window": true,
-      "devtools": false
-    },
-    "message": "DevTools connection failed",
-    "error_code": "DEVTOOLS_INIT_FAILED"
-  }
+  "ready": false,
+  "state": "error",
+  "components": {
+    "http_server": true,
+    "browser_window": true,
+    "devtools": false
+  },
+  "message": "DevTools connection failed",
+  "error_code": "DEVTOOLS_INIT_FAILED"
 }
 ```
 
@@ -601,7 +517,7 @@ Returns initialization status. Poll this endpoint to wait for ABP to be ready af
 # Wait for browser to be ready (bash)
 while true; do
   response=$(curl -s http://localhost:8222/api/v1/browser/status)
-  ready=$(echo "$response" | jq -r '.data.ready')
+  ready=$(echo "$response" | jq -r '.ready')
   if [ "$ready" = "true" ]; then
     echo "Browser ready"
     break
@@ -635,31 +551,19 @@ Gracefully shuts down the browser.
 GET /tabs
 ```
 
-Returns all open tabs.
+Returns all open tabs as an array.
 
 **Response:**
 ```json
-{
-  "success": true,
-  "data": {
-    "tabs": [
-      {
-        "id": "tab_abc123",
-        "index": 0,
-        "url": "https://example.com",
-        "title": "Example Domain",
-        "active": true,
-        "pinned": false,
-        "audible": false,
-        "muted": false,
-        "loading": false,
-        "favicon_url": "https://example.com/favicon.ico"
-      }
-    ],
-    "active_tab_id": "tab_abc123",
-    "count": 1
+[
+  {
+    "id": "tab_abc123",
+    "url": "https://example.com",
+    "title": "Example Domain",
+    "active": true,
+    "loading": false
   }
-}
+]
 ```
 
 ### Get Tab Info
@@ -673,28 +577,10 @@ Returns detailed information about a specific tab.
 **Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "id": "tab_abc123",
-    "index": 0,
-    "url": "https://example.com",
-    "title": "Example Domain",
-    "active": true,
-    "pinned": false,
-    "audible": false,
-    "muted": false,
-    "loading": false,
-    "favicon_url": "https://example.com/favicon.ico",
-    "can_go_back": true,
-    "can_go_forward": false,
-    "zoom_level": 1.0,
-    "bounds": {
-      "x": 0,
-      "y": 0,
-      "width": 1920,
-      "height": 1080
-    }
-  }
+  "id": "tab_abc123",
+  "url": "https://example.com",
+  "title": "Example Domain",
+  "loading": false
 }
 ```
 
@@ -720,13 +606,10 @@ All fields optional. Defaults to blank tab at end, made active.
 **Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "id": "tab_xyz789",
-    "index": 1,
-    "url": "about:blank",
-    "active": true
-  }
+  "id": "tab_xyz789",
+  "url": "about:blank",
+  "title": "",
+  "active": true
 }
 ```
 
@@ -740,13 +623,7 @@ Closes the specified tab.
 
 **Response:**
 ```json
-{
-  "success": true,
-  "data": {
-    "closed_tab_id": "tab_xyz789",
-    "new_active_tab_id": "tab_abc123"
-  }
-}
+{}
 ```
 
 ### Activate Tab (Switch To)
@@ -760,65 +637,8 @@ Switches to the specified tab.
 **Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "id": "tab_xyz789",
-    "active": true
-  }
-}
-```
-
-### Move Tab
-
-```
-POST /tabs/{tab_id}/move
-```
-
-Moves tab to a new position.
-
-**Request:**
-```json
-{
-  "index": 2
-}
-```
-
-### Pin/Unpin Tab
-
-```
-POST /tabs/{tab_id}/pin
-```
-
-```
-POST /tabs/{tab_id}/unpin
-```
-
-### Mute/Unmute Tab
-
-```
-POST /tabs/{tab_id}/mute
-```
-
-```
-POST /tabs/{tab_id}/unmute
-```
-
-### Duplicate Tab
-
-```
-POST /tabs/{tab_id}/duplicate
-```
-
-Creates a copy of the tab.
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "original_tab_id": "tab_abc123",
-    "new_tab_id": "tab_def456"
-  }
+  "id": "tab_xyz789",
+  "active": true
 }
 ```
 
@@ -847,36 +667,42 @@ POST /tabs/{tab_id}/navigate
 **Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "result": {
-      "url": "https://example.com",
-      "title": "Example Domain",
-      "status_code": 200
-    },
-    "screenshot": {
-      "data": "UklGRlYAAABXRUJQVlA4I...",
-      "width": 1920,
-      "height": 1080,
-      "timestamp": 1699999999500
-    },
-    "events": [
-      {
-        "type": "navigation",
-        "timestamp": 1699999999100,
-        "data": {
-          "tab_id": "tab_abc123",
-          "url": "https://example.com",
-          "navigation_type": "link_click"
-        }
+  "result": {
+    "url": "https://example.com",
+    "title": "Example Domain"
+  },
+  "screenshot": {
+    "data": "UklGRlYAAABXRUJQVlA4I...",
+    "width": 1920,
+    "height": 1080,
+    "virtual_time_ms": 1699999999500,
+    "format": "webp"
+  },
+  "scroll": {
+    "horizontal_percent": 0,
+    "vertical_percent": 0,
+    "horizontal_px": 0,
+    "vertical_px": 0,
+    "page_width": 1920,
+    "page_height": 1080,
+    "viewport_width": 1920,
+    "viewport_height": 1080
+  },
+  "events": [
+    {
+      "type": "navigation",
+      "virtual_time_ms": 1699999999100,
+      "data": {
+        "tab_id": "tab_abc123",
+        "url": "https://example.com"
       }
-    ],
-    "timing": {
-      "action_started": 1699999999000,
-      "action_completed": 1699999999100,
-      "wait_completed": 1699999999500,
-      "total_ms": 500
     }
+  ],
+  "timing": {
+    "action_started_ms": 1699999999000,
+    "action_completed_ms": 1699999999100,
+    "wait_completed_ms": 1699999999500,
+    "duration_ms": 500
   }
 }
 ```
@@ -937,7 +763,7 @@ POST /tabs/{tab_id}/stop
 ### Click
 
 ```
-POST /tabs/{tab_id}/mouse/click
+POST /tabs/{tab_id}/click
 ```
 
 Performs a mouse click at the specified coordinates.
@@ -966,81 +792,53 @@ Performs a mouse click at the specified coordinates.
 **Response (example showing dialog triggered by click):**
 ```json
 {
-  "success": true,
-  "data": {
-    "result": {
-      "x": 100,
-      "y": 200,
-      "button": "left"
-    },
-    "screenshot": {
-      "data": "UklGRlYAAABXRUJQVlA4I...",
-      "width": 1920,
-      "height": 1080,
-      "timestamp": 1699999999500
-    },
-    "events": [
-      {
-        "type": "dialog",
-        "timestamp": 1699999999200,
-        "data": {
-          "tab_id": "tab_abc123",
-          "dialog_type": "confirm",
-          "message": "Delete this item?",
-          "pending": true
-        }
+  "result": {
+    "x": 100,
+    "y": 200,
+    "button": "left"
+  },
+  "screenshot": {
+    "data": "UklGRlYAAABXRUJQVlA4I...",
+    "width": 1920,
+    "height": 1080,
+    "virtual_time_ms": 1699999999500,
+    "format": "webp"
+  },
+  "scroll": {
+    "horizontal_percent": 0,
+    "vertical_percent": 25.5,
+    "horizontal_px": 0,
+    "vertical_px": 1200,
+    "page_width": 1920,
+    "page_height": 4700,
+    "viewport_width": 1920,
+    "viewport_height": 1080
+  },
+  "events": [
+    {
+      "type": "dialog",
+      "virtual_time_ms": 1699999999200,
+      "data": {
+        "tab_id": "tab_abc123",
+        "dialog_type": "confirm",
+        "message": "Delete this item?",
+        "pending": true
       }
-    ],
-    "timing": {
-      "action_started": 1699999999000,
-      "action_completed": 1699999999050,
-      "wait_completed": 1699999999500,
-      "total_ms": 500
     }
+  ],
+  "timing": {
+    "action_started_ms": 1699999999000,
+    "action_completed_ms": 1699999999050,
+    "wait_completed_ms": 1699999999500,
+    "duration_ms": 500
   }
-}
-```
-
-### Mouse Down
-
-```
-POST /tabs/{tab_id}/mouse/down
-```
-
-Presses mouse button without releasing.
-
-**Request:**
-```json
-{
-  "x": 100,
-  "y": 200,
-  "button": "left",
-  "modifiers": []
-}
-```
-
-### Mouse Up
-
-```
-POST /tabs/{tab_id}/mouse/up
-```
-
-Releases mouse button.
-
-**Request:**
-```json
-{
-  "x": 100,
-  "y": 200,
-  "button": "left",
-  "modifiers": []
 }
 ```
 
 ### Mouse Move
 
 ```
-POST /tabs/{tab_id}/mouse/move
+POST /tabs/{tab_id}/move
 ```
 
 Moves mouse to coordinates.
@@ -1056,30 +854,10 @@ Moves mouse to coordinates.
 
 **steps:** Number of intermediate mousemove events (for smooth movement)
 
-### Drag and Drop
-
-```
-POST /tabs/{tab_id}/mouse/drag
-```
-
-Performs a drag operation from source to destination.
-
-**Request:**
-```json
-{
-  "from_x": 100,
-  "from_y": 200,
-  "to_x": 300,
-  "to_y": 400,
-  "steps": 20,
-  "button": "left"
-}
-```
-
 ### Scroll (Wheel)
 
 ```
-POST /tabs/{tab_id}/mouse/scroll
+POST /tabs/{tab_id}/scroll
 ```
 
 Performs mouse wheel scroll.
@@ -1097,23 +875,6 @@ Performs mouse wheel scroll.
 
 Negative `delta_y` scrolls down, positive scrolls up.
 
-### Hover
-
-```
-POST /tabs/{tab_id}/mouse/hover
-```
-
-Moves mouse to coordinates and waits (triggers hover states).
-
-**Request:**
-```json
-{
-  "x": 100,
-  "y": 200,
-  "duration_ms": 100
-}
-```
-
 ---
 
 ## Keyboard Actions
@@ -1121,7 +882,7 @@ Moves mouse to coordinates and waits (triggers hover states).
 ### Type Text
 
 ```
-POST /tabs/{tab_id}/keyboard/type
+POST /tabs/{tab_id}/type
 ```
 
 Types text as if entered by user. Generates keydown, keypress, and keyup events.
@@ -1136,16 +897,7 @@ Types text as if entered by user. Generates keydown, keypress, and keyup events.
 
 **delay_ms:** Delay between keystrokes (0 for instant)
 
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "typed": "Hello, World!",
-    "length": 13
-  }
-}
-```
+**Response:** Standard action envelope with `result` containing the typed text.
 
 ### Press Key
 
@@ -1153,7 +905,7 @@ Types text as if entered by user. Generates keydown, keypress, and keyup events.
 POST /tabs/{tab_id}/keyboard/press
 ```
 
-Presses a single key (keydown + keyup).
+Presses a key or key combination (keydown + keyup for all keys). Supports keyboard shortcuts via `modifiers` array.
 
 **Request:**
 ```json
@@ -1163,6 +915,38 @@ Presses a single key (keydown + keyup).
 }
 ```
 
+**Shortcut examples:**
+```json
+// Copy (Ctrl+C)
+{"key": "c", "modifiers": ["Control"]}
+
+// Paste (Ctrl+V)
+{"key": "v", "modifiers": ["Control"]}
+
+// Select All (Ctrl+A)
+{"key": "a", "modifiers": ["Control"]}
+
+// Undo (Ctrl+Z)
+{"key": "z", "modifiers": ["Control"]}
+
+// Redo (Ctrl+Shift+Z)
+{"key": "z", "modifiers": ["Control", "Shift"]}
+
+// Save (Ctrl+S)
+{"key": "s", "modifiers": ["Control"]}
+
+// Find (Ctrl+F)
+{"key": "f", "modifiers": ["Control"]}
+
+// Close tab (Ctrl+W)
+{"key": "w", "modifiers": ["Control"]}
+
+// New tab (Ctrl+T)
+{"key": "t", "modifiers": ["Control"]}
+```
+
+**modifiers options:** `"Shift"`, `"Control"`, `"Alt"`, `"Meta"`
+
 **Common key values:**
 - Letters: `"a"` - `"z"`, `"A"` - `"Z"`
 - Numbers: `"0"` - `"9"`
@@ -1170,7 +954,6 @@ Presses a single key (keydown + keyup).
 - Navigation: `"ArrowUp"`, `"ArrowDown"`, `"ArrowLeft"`, `"ArrowRight"`
 - Editing: `"Backspace"`, `"Delete"`, `"Enter"`, `"Tab"`, `"Escape"`
 - Whitespace: `"Space"`
-- Modifiers: `"Shift"`, `"Control"`, `"Alt"`, `"Meta"`
 - Special: `"Home"`, `"End"`, `"PageUp"`, `"PageDown"`, `"Insert"`
 
 ### Key Down
@@ -1204,84 +987,14 @@ Releases a pressed key.
 }
 ```
 
-### Key Combination (Shortcut)
+---
 
-```
-POST /tabs/{tab_id}/keyboard/shortcut
-```
-
-Performs a keyboard shortcut.
-
-**Request:**
-```json
-{
-  "keys": ["Control", "a"]
-}
-```
-
-**Common shortcuts:**
-- Select all: `["Control", "a"]`
-- Copy: `["Control", "c"]`
-- Paste: `["Control", "v"]`
-- Cut: `["Control", "x"]`
-- Undo: `["Control", "z"]`
-- Redo: `["Control", "Shift", "z"]`
-- Find: `["Control", "f"]`
-- Save: `["Control", "s"]`
-- New tab: `["Control", "t"]`
-- Close tab: `["Control", "w"]`
-- Refresh: `["Control", "r"]` or `["F5"]`
-
-### Insert Text (Raw)
-
-```
-POST /tabs/{tab_id}/keyboard/insert
-```
-
-Inserts text directly without key events. Useful for pasting large amounts of text.
-
-**Request:**
-```json
-{
-  "text": "Large block of text..."
-}
-```
-
-## Page Content
-
-### Get Page HTML
-
-```
-GET /tabs/{tab_id}/content/html
-```
-
-**Query params:**
-- `outer=true` - Include `<html>` tag (default: true)
-
-### Get Page Text
-
-```
-GET /tabs/{tab_id}/content/text
-```
-
-Returns visible text content.
-
-### Get Page Title
-
-```
-GET /tabs/{tab_id}/content/title
-```
-
-### Get Page URL
-
-```
-GET /tabs/{tab_id}/content/url
-```
+## JavaScript Execution
 
 ### Execute JavaScript
 
 ```
-POST /tabs/{tab_id}/content/execute
+POST /tabs/{tab_id}/execute
 ```
 
 Execute JavaScript in the page context and retrieve results.
@@ -1304,12 +1017,9 @@ Execute JavaScript in the page context and retrieve results.
 **Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "result": {
-      "value": 42,
-      "type": "number"
-    }
+  "result": {
+    "value": 42,
+    "type": "number"
   }
 }
 ```
@@ -1376,214 +1086,12 @@ POST /tabs/{tab_id}/screenshot
 **Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "image": "UklGRlYAAABXRUJQ...",
-    "width": 1920,
-    "height": 1080
-  }
+  "data": "UklGRlYAAABXRUJQ...",
+  "mimeType": "image/webp",
+  "format": "webp",
+  "width": 1920,
+  "height": 1080
 }
-```
-
-### Region Screenshot
-
-```
-POST /tabs/{tab_id}/screenshot/region
-```
-
-**Request:**
-```json
-{
-  "x": 0,
-  "y": 0,
-  "width": 800,
-  "height": 600,
-  "encoding": "base64"
-}
-```
-
-### Screenshot with Wait
-
-```
-POST /tabs/{tab_id}/screenshot/wait
-```
-
-Capture a screenshot after waiting for a condition. Follows the standard action envelope pattern with full event capture.
-
-**Request:**
-```json
-{
-  "wait_until": {
-    "type": "action_complete",
-    "timeout_ms": 30000
-  },
-  "screenshot": {
-    "area": "viewport",
-    "markup": "interactive",
-    "cursor": true
-  },
-  "full_page": false
-}
-```
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `wait_until` | object | `{"type": "action_complete"}` | Wait condition before capture |
-| `screenshot` | object | See below | Screenshot options (area, markup, cursor) |
-| `full_page` | boolean | `false` | Capture full scrollable page |
-
-**Response (standard action envelope):**
-```json
-{
-  "success": true,
-  "data": {
-    "result": {
-      "width": 1920,
-      "height": 1080,
-      "full_page": false
-    },
-    "screenshot": {
-      "data": "UklGRlYAAABXRUJQVlA4I...",
-      "width": 1920,
-      "height": 1080,
-      "timestamp": 1699999999500,
-      "markup": "interactive",
-      "marked_elements": [
-        {
-          "index": 0,
-          "type": "button",
-          "bounds": {"x": 100, "y": 200, "width": 80, "height": 32},
-          "center": {"x": 140, "y": 216},
-          "text": "Submit"
-        }
-      ]
-    },
-    "scroll": {
-      "horizontal_percent": 0,
-      "vertical_percent": 25.5,
-      "horizontal_px": 0,
-      "vertical_px": 1200,
-      "page_width": 1920,
-      "page_height": 4700,
-      "viewport_width": 1920,
-      "viewport_height": 1080
-    },
-    "events": [],
-    "timing": {
-      "action_started": 1699999999000,
-      "wait_completed": 1699999999500,
-      "total_ms": 500
-    }
-  }
-}
-```
-
-**Use cases:**
-- Wait for page to stabilize after navigation before capturing
-- Wait for network idle to ensure all images/content loaded
-- Capture with element markup for AI agent decision-making
-- Get scroll position and page dimensions along with screenshot
-
----
-
-## Network
-
-### Get Network Log
-
-```
-GET /tabs/{tab_id}/network/requests
-```
-
-**Query params:**
-- `limit=100` - Max entries to return
-- `type=xhr` - Filter by resource type
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "requests": [
-      {
-        "id": "req_123",
-        "url": "https://api.example.com/data",
-        "method": "GET",
-        "status": 200,
-        "type": "xhr",
-        "start_time": 1699999999000,
-        "duration_ms": 145,
-        "request_headers": {},
-        "response_headers": {},
-        "size_bytes": 1234
-      }
-    ]
-  }
-}
-```
-
-### Enable Request Interception
-
-```
-POST /tabs/{tab_id}/network/intercept
-```
-
-**Request:**
-```json
-{
-  "patterns": [
-    {
-      "url_pattern": "*://api.example.com/*",
-      "resource_types": ["xhr", "fetch"],
-      "action": "pause"
-    }
-  ]
-}
-```
-
-### Get Intercepted Requests
-
-```
-GET /tabs/{tab_id}/network/intercepted
-```
-
-### Continue Intercepted Request
-
-```
-POST /tabs/{tab_id}/network/intercepted/{request_id}/continue
-```
-
-**Request:**
-```json
-{
-  "url": "https://modified-url.com",
-  "method": "POST",
-  "headers": {
-    "X-Custom-Header": "value"
-  }
-}
-```
-
-### Fulfill Intercepted Request
-
-```
-POST /tabs/{tab_id}/network/intercepted/{request_id}/fulfill
-```
-
-**Request:**
-```json
-{
-  "status": 200,
-  "headers": {
-    "Content-Type": "application/json"
-  },
-  "body": "{\"mocked\": true}"
-}
-```
-
-### Abort Intercepted Request
-
-```
-POST /tabs/{tab_id}/network/intercepted/{request_id}/abort
 ```
 
 ---
@@ -1599,13 +1107,10 @@ GET /tabs/{tab_id}/dialog
 **Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "present": true,
-    "type": "confirm",
-    "message": "Are you sure you want to delete this item?",
-    "default_prompt": ""
-  }
+  "present": true,
+  "type": "confirm",
+  "message": "Are you sure you want to delete this item?",
+  "default_prompt": ""
 }
 ```
 
@@ -1630,128 +1135,9 @@ POST /tabs/{tab_id}/dialog/dismiss
 
 ---
 
-## Wait Conditions
-
-### Wait for Navigation
-
-```
-POST /tabs/{tab_id}/wait/navigation
-```
-
-**Request:**
-```json
-{
-  "wait_until": "load",
-  "timeout_ms": 30000
-}
-```
-
-### Wait for Network Idle
-
-```
-POST /tabs/{tab_id}/wait/network-idle
-```
-
-**Request:**
-```json
-{
-  "idle_time_ms": 500,
-  "timeout_ms": 30000
-}
-```
-
----
-
-## Window Management
-
-### Get Window Info
-
-```
-GET /window
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "window_1",
-    "state": "normal",
-    "bounds": {
-      "x": 0,
-      "y": 0,
-      "width": 1920,
-      "height": 1080
-    },
-    "fullscreen": false,
-    "minimized": false,
-    "maximized": false
-  }
-}
-```
-
-### Set Window Bounds
-
-```
-POST /window/bounds
-```
-
-**Request:**
-```json
-{
-  "x": 100,
-  "y": 100,
-  "width": 1280,
-  "height": 720
-}
-```
-
-### Minimize Window
-
-```
-POST /window/minimize
-```
-
-### Maximize Window
-
-```
-POST /window/maximize
-```
-
-### Fullscreen
-
-```
-POST /window/fullscreen
-```
-
-### Restore Window
-
-```
-POST /window/restore
-```
-
----
-
 ## Downloads
 
-### Configure Download Behavior
-
-```
-POST /downloads/config
-```
-
-Configure how downloads are handled.
-
-**Request:**
-```json
-{
-  "download_path": "/path/to/downloads",
-  "prompt": false,
-  "overwrite": true
-}
-```
-
-**prompt:** If `false`, downloads automatically save to `download_path`. If `true`, will wait for file chooser handling.
+Downloads are configured via ABP config at launch (download path, auto-accept behavior). The API provides read-only access to download status.
 
 ### List Downloads
 
@@ -1765,63 +1151,43 @@ GET /downloads
 
 **Response:**
 ```json
-{
-  "success": true,
-  "data": {
-    "downloads": [
-      {
-        "id": "dl_123",
-        "url": "https://example.com/file.pdf",
-        "filename": "file.pdf",
-        "path": "/downloads/file.pdf",
-        "state": "completed",
-        "bytes_received": 102400,
-        "total_bytes": 102400,
-        "mime_type": "application/pdf",
-        "start_time": 1699999999000,
-        "end_time": 1699999999500
-      }
-    ]
+[
+  {
+    "id": "dl_123",
+    "url": "https://example.com/file.pdf",
+    "filename": "file.pdf",
+    "path": "/downloads/file.pdf",
+    "state": "completed",
+    "bytes_received": 102400,
+    "total_bytes": 102400,
+    "mime_type": "application/pdf",
+    "start_time": 1699999999000,
+    "end_time": 1699999999500
   }
-}
+]
 ```
 
-### Get Download Info
+### Get Download Status
 
 ```
 GET /downloads/{download_id}
 ```
 
-Returns detailed information about a specific download.
-
-### Wait for Download
-
-```
-POST /downloads/wait
-```
-
-Wait for a download to start or complete.
-
-**Request:**
-```json
-{
-  "timeout_ms": 30000,
-  "state": "completed"
-}
-```
-
-**state options:** `"started"`, `"completed"`
+Returns status information about a specific download.
 
 **Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "id": "dl_456",
-    "path": "/downloads/report.pdf",
-    "state": "completed",
-    "bytes_received": 204800
-  }
+  "id": "dl_123",
+  "url": "https://example.com/file.pdf",
+  "filename": "file.pdf",
+  "path": "/downloads/file.pdf",
+  "state": "in_progress",
+  "bytes_received": 51200,
+  "total_bytes": 102400,
+  "percent_complete": 50,
+  "mime_type": "application/pdf",
+  "start_time": 1699999999000
 }
 ```
 
@@ -1831,64 +1197,57 @@ Wait for a download to start or complete.
 POST /downloads/{download_id}/cancel
 ```
 
-### Resume Download
-
-```
-POST /downloads/{download_id}/resume
-```
-
-Resume a paused download.
-
-### Delete Download
-
-```
-DELETE /downloads/{download_id}
-```
-
-**Query params:**
-- `delete_file=false` - Also delete the downloaded file
-
----
-
-## File Chooser (Native File Dialogs)
-
-Handle native OS file picker dialogs that appear when clicking file inputs or save buttons.
-
-### Get Pending File Chooser
-
-```
-GET /tabs/{tab_id}/file-chooser
-```
-
-Check if a file chooser dialog is pending.
+Cancels an in-progress download.
 
 **Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "present": true,
-    "type": "open",
-    "accepts": [
-      {
-        "description": "Images",
-        "extensions": ["jpg", "png", "gif"]
-      }
-    ],
-    "multiple": false
-  }
+  "id": "dl_123",
+  "state": "cancelled"
 }
 ```
 
-**type options:** `"open"`, `"open-multiple"`, `"save"`
+---
 
-### Set File Chooser Files
+## File Chooser
+
+File chooser dialogs (triggered by clicking file inputs or save buttons) emit events with unique IDs. Use the file chooser endpoint to provide files to a pending dialog.
+
+### File Chooser Event
+
+When an action triggers a file chooser, the response includes a `file_chooser` event:
+
+```json
+{
+  "events": [
+    {
+      "type": "file_chooser",
+      "virtual_time_ms": 1699999999200,
+      "data": {
+        "id": "fc_abc123",
+        "tab_id": "tab_xyz789",
+        "chooser_type": "open",
+        "accepts": [
+          {"description": "Images", "extensions": ["jpg", "png", "gif"]},
+          {"description": "All Files", "extensions": ["*"]}
+        ],
+        "multiple": false,
+        "pending": true
+      }
+    }
+  ]
+}
+```
+
+**chooser_type values:** `"open"`, `"open_multiple"`, `"save"`
+
+### Provide Files to File Chooser
 
 ```
-POST /tabs/{tab_id}/file-chooser/select
+POST /file-chooser/{chooser_id}
 ```
 
-Automatically select files when a file chooser appears. Can be called before triggering the dialog.
+Provides files to a pending file chooser dialog.
 
 **Request (for open dialogs):**
 ```json
@@ -1907,43 +1266,126 @@ Automatically select files when a file chooser appears. Can be called before tri
 }
 ```
 
-**Response:**
+**Request (to cancel/dismiss):**
 ```json
 {
-  "success": true,
-  "data": {
-    "files_selected": ["/path/to/document.pdf"],
-    "dialog_closed": true
-  }
+  "cancel": true
 }
 ```
 
-### Cancel File Chooser
-
-```
-POST /tabs/{tab_id}/file-chooser/cancel
-```
-
-Dismiss the file chooser without selecting files.
-
-### Set Default File Chooser Behavior
-
-```
-POST /tabs/{tab_id}/file-chooser/config
+**Response:**
+```json
+{
+  "id": "fc_abc123",
+  "files_provided": ["/path/to/document.pdf"],
+  "closed": true
+}
 ```
 
-Pre-configure automatic file selection for future dialogs.
+**Error (chooser not found or expired):**
+```json
+{
+  "error": "File chooser fc_abc123 not found or already closed"
+}
+```
+
+---
+
+## Execution Control
+
+Control JavaScript execution and virtual time for deterministic page state between agent actions. When enabled, the page is completely frozen (no JS execution, no timers) between actions.
+
+### Get Execution State
+
+```
+GET /tabs/{tab_id}/execution
+```
+
+Returns the current execution control state for a tab.
+
+**Response:**
+```json
+{
+  "enabled": true,
+  "paused": true,
+  "virtual_time_base_ms": 1700000000000.0
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | boolean | Whether execution control is enabled for this tab |
+| `paused` | boolean | Whether JS execution is currently paused |
+| `virtual_time_base_ms` | number | Virtual time base in milliseconds since epoch |
+
+### Set Execution State
+
+```
+POST /tabs/{tab_id}/execution
+```
+
+Enable execution control and/or pause/resume JavaScript execution.
 
 **Request:**
 ```json
 {
-  "auto_select": true,
-  "default_files": ["/path/to/default/file.txt"],
-  "default_save_path": "/path/to/saves/"
+  "paused": true,
+  "initial_virtual_time": 1700000000.0
 }
 ```
 
-When `auto_select` is `true`, file choosers will automatically use the configured files without waiting for explicit handling.
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `paused` | boolean | Yes | `true` to pause, `false` to resume |
+| `initial_virtual_time` | number | No | Initial virtual time in seconds since Unix epoch (only used when first enabling) |
+
+**Response:**
+```json
+{
+  "enabled": true,
+  "paused": true,
+  "virtual_time_base_ms": 1700000000000.0
+}
+```
+
+### How It Works
+
+Execution control uses two CDP mechanisms:
+
+1. **Debugger.pause/resume** - Halts/resumes all JavaScript execution
+2. **Emulation.setVirtualTimePolicy** - Freezes/advances timers, Date.now(), and animations
+
+By default (unless `--abp-disable-pause` is set):
+
+1. Actions (click, type, navigate) automatically **resume** execution before dispatching
+2. After the action completes, execution is **paused** before taking screenshots
+3. Screenshots capture a completely frozen page state
+
+**Action Flow:**
+```
+Agent sends click action
+  → ABP resumes JS (Debugger.resume + virtual time advance)
+  → Dispatches click event
+  → Waits for action to complete
+  → Pauses JS (virtual time pause + Debugger.pause)
+  → Takes screenshot (page frozen)
+  → Returns response with screenshot
+```
+
+### Command-Line Flag
+
+Execution control is **enabled by default** when using ABP. To disable it:
+```bash
+./chrome --enable-abp --abp-disable-pause
+```
+
+With `--abp-disable-pause`, actions do not pause/resume execution - they behave without freezing the page.
+
+### Use Cases
+
+- **Deterministic testing**: Ensure identical page state between test runs
+- **AI agent reliability**: Freeze timers/animations while agent processes screenshot
+- **Debugging**: Stop page execution to inspect state
 
 ---
 

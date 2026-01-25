@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation Test - Page 2</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #fff3e0;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 20px;
+            color: #e65100;
+        }
+        .info-row {
+            margin: 5px 0;
+            font-family: monospace;
+        }
+        .info-label {
+            display: inline-block;
+            width: 150px;
+            color: #666;
+        }
+        a {
+            display: block;
+            margin: 10px 0;
+            color: #e65100;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+
+        #link-back {
+            position: absolute;
+            left: 50px;
+            top: 130px;
+        }
+        #link-page-3 {
+            position: absolute;
+            left: 50px;
+            top: 180px;
+        }
+
+        #page-title {
+            position: absolute;
+            left: 50px;
+            top: 20px;
+        }
+        #page-id {
+            position: absolute;
+            left: 50px;
+            top: 60px;
+            font-family: monospace;
+            color: #666;
+        }
+
+        .history-section {
+            position: absolute;
+            left: 350px;
+            top: 100px;
+            background: white;
+            padding: 15px;
+            border: 1px solid #ffcc80;
+            border-radius: 4px;
+            min-width: 300px;
+        }
+        .section-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #e65100;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="page-title">Navigation Test - Page 2</h1>
+    <div id="page-id">Page ID: page-2</div>
+
+    <a href="navigation-test.html" id="link-back">Back to Page 1</a>
+    <a href="navigation-test-page3.html" id="link-page-3">Go to Page 3</a>
+
+    <div class="history-section">
+        <div class="section-title">History State</div>
+        <div class="info-row">
+            <span class="info-label">History Length:</span>
+            <span id="history-length">-</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Current URL:</span>
+            <span id="current-url">-</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Referrer:</span>
+            <span id="referrer">-</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Load Timestamp:</span>
+            <span id="load-timestamp">-</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Visit Count:</span>
+            <span id="visit-count">-</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Nav History:</span>
+            <span id="nav-history">-</span>
+        </div>
+    </div>
+
+    <script>
+        const PAGE_ID = 'page-2';
+        const loadTimestamp = Date.now();
+
+        document.getElementById('load-timestamp').textContent = new Date(loadTimestamp).toISOString();
+
+        let visitCount = parseInt(sessionStorage.getItem('visit-count-' + PAGE_ID) || '0');
+        visitCount++;
+        sessionStorage.setItem('visit-count-' + PAGE_ID, visitCount);
+        document.getElementById('visit-count').textContent = visitCount;
+
+        document.getElementById('history-length').textContent = window.history.length;
+        document.getElementById('current-url').textContent = window.location.href;
+        document.getElementById('referrer').textContent = document.referrer || '(none)';
+
+        let navHistory = JSON.parse(sessionStorage.getItem('nav-history') || '[]');
+        navHistory.push({
+            page: PAGE_ID,
+            timestamp: loadTimestamp,
+            url: window.location.href
+        });
+        if (navHistory.length > 10) {
+            navHistory = navHistory.slice(-10);
+        }
+        sessionStorage.setItem('nav-history', JSON.stringify(navHistory));
+        document.getElementById('nav-history').textContent = navHistory.map(h => h.page).join(' -> ');
+
+        window.pageInfo = {
+            pageId: PAGE_ID,
+            loadTimestamp: loadTimestamp,
+            visitCount: visitCount,
+            historyLength: window.history.length,
+            referrer: document.referrer
+        };
+    </script>
+</body>
+</html>

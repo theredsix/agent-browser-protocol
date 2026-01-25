@@ -3,10 +3,16 @@ import("//build/config/ui.gni")
 
 source_set("abp") {
   sources = [
+    "abp_action_context.cc",
+    "abp_action_context.h",
     "abp_config.cc",
     "abp_config.h",
     "abp_controller.cc",
     "abp_controller.h",
+    "abp_download_observer.cc",
+    "abp_download_observer.h",
+    "abp_event_collector.cc",
+    "abp_event_collector.h",
     "abp_event_observer.cc",
     "abp_event_observer.h",
     "abp_history_controller.cc",
@@ -23,6 +29,7 @@ source_set("abp") {
     "//base",
     "//chrome/browser/ui",
     "//chrome/common",
+    "//components/download/public/common:public",
     "//components/version_info",
     "//content/public/browser",
     "//net",

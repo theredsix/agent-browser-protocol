@@ -11,6 +11,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/abp/abp_config.h"
 #include "chrome/browser/abp/abp_controller.h"
+#include "chrome/browser/abp/abp_download_observer.h"
 #include "chrome/browser/abp/abp_event_observer.h"
 #include "chrome/browser/abp/abp_history_controller.h"
 #include "chrome/browser/abp/abp_switches.h"
@@ -53,6 +54,11 @@ AbpHttpServer::AbpHttpServer(int port) : port_(port) {}
 AbpHttpServer::~AbpHttpServer() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+  // Stop download observer
+  if (download_observer_) {
+    download_observer_->Stop();
+  }
+
   // Stop event observer
   if (event_observer_) {
     event_observer_->Stop();
@@ -70,6 +76,9 @@ void AbpHttpServer::Start() {
   // Load configuration
   AbpConfig config = LoadAbpConfig();
 
+  // Print session directory at startup
+  LOG(INFO) << "ABP: Session directory: " << config.session_dir.value();
+
   // Create history controller
   history_controller_ = std::make_unique<AbpHistoryController>(config);
   history_controller_->Initialize();
@@ -84,6 +93,11 @@ void AbpHttpServer::Start() {
         std::make_unique<AbpEventObserver>(history_controller_.get());
     event_observer_->Start();
   }
+
+  // Create download observer
+  download_observer_ = std::make_unique<AbpDownloadObserver>(controller_.get());
+  download_observer_->Start();
+  controller_->SetDownloadObserver(download_observer_.get());
 
   // Safe to use Unretained because AbpHttpServer is a singleton that lives
   // for the lifetime of the browser process.
@@ -196,7 +210,8 @@ void AbpHttpServer::HandleRequestOnUI(int connection_id,
     } else {
       // History disabled
       std::move(callback).Run(
-          503, R"({"success":false,"error":"HISTORY_DISABLED"})");
+          503, "application/json",
+          R"({"success":false,"error":"HISTORY_DISABLED"})");
     }
     return;
   }
@@ -206,6 +221,7 @@ void AbpHttpServer::HandleRequestOnUI(int connection_id,
 
 void AbpHttpServer::OnResponseReady(int connection_id,
                                     int status_code,
+                                    const std::string& content_type,
                                     std::string body) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -215,7 +231,7 @@ void AbpHttpServer::OnResponseReady(int connection_id,
                      base::Unretained(this),
                      connection_id,
                      status_code,
-                     "application/json",
+                     content_type,
                      std::move(body)));
 }
 

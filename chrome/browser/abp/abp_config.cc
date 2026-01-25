@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/uuid.h"
 #include "chrome/browser/abp/abp_switches.h"
 #include "chrome/common/chrome_paths.h"
 
@@ -47,13 +48,24 @@ base::FilePath GetDefaultConfigDir() {
 
 // static
 AbpConfig AbpConfig::GetDefaults() {
+  // Generate UUID for session directory
+  std::string uuid = base::Uuid::GenerateRandomV4().AsLowercaseString();
+  base::FilePath session_dir =
+      base::FilePath("/tmp").Append("abp-" + uuid);
+
+  return GetDefaultsWithSessionDir(session_dir);
+}
+
+// static
+AbpConfig AbpConfig::GetDefaultsWithSessionDir(
+    const base::FilePath& session_dir) {
   AbpConfig config;
-  base::FilePath config_dir = GetDefaultConfigDir();
+  config.session_dir = session_dir;
 
   config.history.enabled = true;
-  config.history.database_path = config_dir.Append("abp_history.db");
+  config.history.database_path = session_dir.Append("history.db");
   config.history.screenshots.enabled = true;
-  config.history.screenshots.directory = config_dir.Append("abp_screenshots");
+  config.history.screenshots.directory = session_dir.Append("screenshots");
 
   return config;
 }
@@ -126,11 +138,24 @@ AbpConfig LoadAbpConfigFromFile(const base::FilePath& config_path) {
 AbpConfig LoadAbpConfig() {
   const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
-  // Check --abp-config flag first
+  // Check --abp-session-dir flag for custom session directory
+  base::FilePath session_dir;
+  if (command_line->HasSwitch(switches::kAbpSessionDir)) {
+    session_dir = command_line->GetSwitchValuePath(switches::kAbpSessionDir);
+  }
+
+  // Check --abp-config flag for config file
   if (command_line->HasSwitch(switches::kAbpConfig)) {
     base::FilePath config_path =
         command_line->GetSwitchValuePath(switches::kAbpConfig);
-    return LoadAbpConfigFromFile(config_path);
+    AbpConfig config = LoadAbpConfigFromFile(config_path);
+    // Override session_dir if specified via command line
+    if (!session_dir.empty()) {
+      config.session_dir = session_dir;
+      config.history.database_path = session_dir.Append("history.db");
+      config.history.screenshots.directory = session_dir.Append("screenshots");
+    }
+    return config;
   }
 
   // Try default config location
@@ -138,11 +163,21 @@ AbpConfig LoadAbpConfig() {
   if (!config_dir.empty()) {
     base::FilePath default_config = config_dir.Append("abp_config.json");
     if (base::PathExists(default_config)) {
-      return LoadAbpConfigFromFile(default_config);
+      AbpConfig config = LoadAbpConfigFromFile(default_config);
+      // Override session_dir if specified via command line
+      if (!session_dir.empty()) {
+        config.session_dir = session_dir;
+        config.history.database_path = session_dir.Append("history.db");
+        config.history.screenshots.directory = session_dir.Append("screenshots");
+      }
+      return config;
     }
   }
 
-  // Return defaults
+  // Return defaults with custom session dir if provided
+  if (!session_dir.empty()) {
+    return AbpConfig::GetDefaultsWithSessionDir(session_dir);
+  }
   return AbpConfig::GetDefaults();
 }
 
