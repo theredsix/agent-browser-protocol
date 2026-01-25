@@ -4,24 +4,41 @@
 
 **Synchronous browsing for agents:** one request = one completed step (settled state + screenshot + event log).
 
-```mermaid
-flowchart LR
-  A[AI Agent] -->|"POST /click (x=450, y=320)"| B[ABP Chromium]
-  B --> C1[Inject real input event]
-  C1 --> D1[Wait for page to settle]
-  D1 --> E1[Capture compositor screenshot]
-  E1 --> F1["Return events (e.g. tab_created)"]
-  F1 --> P1[Pause JavaScript + virtual time]
-  P1 -->|"200 OK: screenshot + events"| A
-
-  A -->|"POST /type (text=Show HN)"| B
-  B --> U2[Unpause JavaScript + virtual time]
-  U2 --> C2[Inject real keyboard events]
-  C2 --> D2[Wait for page to settle]
-  D2 --> E2[Capture compositor screenshot]
-  E2 --> F2[Return events]
-  F2 --> P2[Pause JavaScript + virtual time]
-  P2 -->|"200 OK: screenshot + events"| A
+```
+    AI Agent                                 ABP Chromium
+        │                                         │
+        │  POST /click (x=450, y=320)             │
+        │────────────────────────────────────────>│
+        │                                         │  Inject real input event
+        │                                         │  Wait for page to settle
+        │                                         │  Capture compositor screenshot
+        │                                         │  Collect events (e.g. tab_created)
+        │                                         │  ┌─────────────────────────────┐
+        │                                         │  │ PAUSE JavaScript + virtual  │
+        │                                         │  │ time                        │
+        │                                         │  └─────────────────────────────┘
+        │  200 OK: screenshot + events            │
+        │<────────────────────────────────────────│
+        │                                         │
+        ·  (agent inspects screenshot, decides)   ·
+        │                                         │
+        │  POST /type (text="Show HN")            │
+        │────────────────────────────────────────>│
+        │                                         │  ┌─────────────────────────────┐
+        │                                         │  │ UNPAUSE JavaScript + virtual│
+        │                                         │  │ time                        │
+        │                                         │  └─────────────────────────────┘
+        │                                         │  Inject real keyboard events
+        │                                         │  Wait for page to settle
+        │                                         │  Capture compositor screenshot
+        │                                         │  Collect events
+        │                                         │  ┌─────────────────────────────┐
+        │                                         │  │ PAUSE JavaScript + virtual  │
+        │                                         │  │ time                        │
+        │                                         │  └─────────────────────────────┘
+        │  200 OK: screenshot + events            │
+        │<────────────────────────────────────────│
+        │                                         │
 ```
 
 No WebSocket. No CDP session management. No Puppeteer abstraction layers.
