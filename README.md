@@ -1,8 +1,8 @@
 # Agent Browser Protocol
 
-**A Chromium fork with a REST API built directly into the browser engine for AI agent control.**
+**Browsers are async. Agents are synchronous. ABP turns continuous browsing into discrete, atomic steps—so LLMs can reason about the web without racing against it.**
 
-**Synchronous browsing for agents:** one request = one completed step (settled state + screenshot + event log).
+A Chromium fork with a REST + MCP API built directly into the browser engine. One request = one completed step (settled state + screenshot + event log).
 
 ```
     AI Agent                                 ABP Chromium
@@ -48,9 +48,11 @@ Just `curl http://localhost:8222/api/v1/tabs` and you're in.
 
 ## Why Fork Chromium?
 
-Extensions run in a sandbox. CDP was designed for DevTools, not autonomous control. Playwright and Puppeteer inherit that model: a live, asynchronous browser where agents must guess when an action is complete, juggle sessions, and paper over timing with retries.
+Web browsing is inherently asynchronous—events fire unpredictably, pages settle on their own timeline, state changes continuously. LLMs reason synchronously—one observation, one decision, one action. This mismatch is fundamental: existing tools force agents to race against a live browser, guessing when actions complete and papering over timing with retries.
 
-We needed **synchronous browsing for agents**: a step-based, request/response contract where the agent only ever acts on a stable world state.
+Extensions can't fix this (sandboxed). CDP can't fix this (designed for DevTools, not autonomous control). Playwright and Puppeteer inherit the same model. We needed to go deeper.
+
+**ABP reformats browsing into a step machine**: a request/response contract where the agent only ever acts on a stable, frozen world state.
 
 | What agents need | What existing tools provide |
 |------------------|----------------------------|
@@ -62,7 +64,7 @@ We needed **synchronous browsing for agents**: a step-based, request/response co
 | Action-complete detection | Manual waits or flaky heuristics |
 | Event list between actions (new tab, dialog, file picker, etc.) | Polling, or async event subscriptions |
 
-**ABP treats the browser as a step machine.** Each API call injects real input through Chromium's input system, waits for an engine-defined "settled" boundary, captures compositor output (with cursor), and returns the events that occurred during the step. JavaScript and virtual time are paused between steps—so the agent experiences a synchronous, deterministic control surface over an inherently asynchronous web.
+**Each API call is one atomic step.** ABP injects real input through Chromium's input system, waits for an engine-defined "settled" boundary, captures compositor output (with cursor), and returns the events that occurred. JavaScript and virtual time freeze between steps. The agent never races against the browser—it observes, decides, acts, and repeats on a world that waits for it.
 
 ---
 
@@ -91,15 +93,10 @@ curl -X POST http://localhost:8222/api/v1/tabs \
   -H "Content-Type: application/json" \
   -d '{"url": "https://news.ycombinator.com"}'
 
-# Take a screenshot with interactive elements marked
-curl -X POST http://localhost:8222/api/v1/tabs/{TAB_ID}/screenshot \
-  -H "Content-Type: application/json" \
-  -d '{"screenshot": {"markup": "interactive"}}'
-
-# Click the first link
+# Click the first link (with element markup in response screenshot)
 curl -X POST http://localhost:8222/api/v1/tabs/{TAB_ID}/click \
   -H "Content-Type: application/json" \
-  -d '{"x": 450, "y": 320}'
+  -d '{"x": 450, "y": 320, "screenshot": {"markup": "interactive"}}'
 
 # Type in a search box
 curl -X POST http://localhost:8222/api/v1/tabs/{TAB_ID}/type \
@@ -180,9 +177,18 @@ Enabled by default with `--enable-abp`. Disable with `--abp-disable-pause`.
 
 ### 4. Element Markup
 
-Request screenshots with bounding boxes drawn around interactive elements:
+Every action endpoint accepts a `screenshot` object to control how the response screenshot is captured. Request bounding boxes drawn around interactive elements:
 
 ```bash
+# Markup on a click action—see what's clickable after the click completes
+curl -X POST http://localhost:8222/api/v1/tabs/{id}/click \
+  -d '{"x": 450, "y": 320, "screenshot": {"markup": "interactive"}}'
+
+# Markup on navigation—identify form fields on the new page
+curl -X POST http://localhost:8222/api/v1/tabs/{id}/navigate \
+  -d '{"url": "https://example.com", "screenshot": {"markup": "typeable"}}'
+
+# Standalone screenshot with markup
 curl -X POST http://localhost:8222/api/v1/tabs/{id}/screenshot \
   -d '{"screenshot": {"markup": "interactive"}}'
 ```
@@ -193,7 +199,7 @@ Markup options:
 - `typeable` - Text inputs, textareas, contenteditable
 - `inputs` - All form inputs
 
-The response includes element metadata with center coordinates for clicking.
+Screenshot options are available on all action endpoints: `/click`, `/type`, `/navigate`, `/scroll`, `/keyboard/*`, and `/screenshot`. The response includes element metadata with center coordinates for clicking.
 
 ### 5. Virtual Cursor
 
