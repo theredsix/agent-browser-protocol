@@ -1,5 +1,22 @@
 # Agent Browser Protocol - Technical Design Spec
 
+## Implementation Status
+
+This document describes the ABP architecture and design. The actual implementation is located at `chrome/browser/abp/` (not `//components/abp_server/` as originally planned).
+
+**Core Implementation Complete:**
+- AbpHttpServer (IO thread HTTP server)
+- AbpController (UI thread request handler)
+- AbpActionContext (unified action flow)
+- AbpEventCollector (event capture)
+- AbpHistoryController (SQLite persistence)
+- Virtual cursor (compositor layer via Mojo IPC)
+- Execution control (pause/resume + virtual time)
+
+See [implementation.md](./implementation.md) for detailed implementation status.
+
+---
+
 ## Overview
 
 The Agent Browser Protocol (ABP) is a REST-based API that provides engine-native browser control for AI agents. Unlike CDP (Chrome DevTools Protocol) or browser extensions, ABP operates at the C++ engine level, offering direct access to browser internals with lower latency and greater capability.

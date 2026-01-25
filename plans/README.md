@@ -1028,19 +1028,29 @@ The MCP server exposes all ABP functionality as tools that AI systems like Claud
 
 ## Project Status
 
-### Working Features
+### Implemented Features
 
-- Tab management (list, create, close, activate)
-- Navigation (URL, back, forward, reload)
-- Screenshots (viewport with optional element markup)
-- Input (click, type via CDP)
-- JavaScript execution (via CDP)
+- **Tab management**: list, create, close, activate, get info, stop loading
+- **Navigation**: URL navigation, back, forward, reload
+- **Screenshots**: viewport capture with optional element markup overlays (interactive, clickable, typeable, inputs)
+- **Mouse input**: click at coordinates, move, scroll (wheel), wait
+- **Keyboard input**: type text, key press with modifiers (Ctrl+C, etc.), key down/up
+- **JavaScript execution**: via CDP Runtime.evaluate
+- **Dialogs**: get pending dialog, accept, dismiss (alert/confirm/prompt)
+- **Downloads**: list, get status, cancel
+- **File chooser**: handle native file picker dialogs
+- **Execution control**: pause/resume JavaScript, virtual time
+- **History tracking**: SQLite persistence with before/after screenshots
+- **Virtual cursor**: compositor-layer rendering via Mojo IPC
+- **Browser control**: get status, shutdown
+- **MCP Server**: 14 tools for AI agent integration
+- **Test harness**: Integration tests in `chrome/browser/abp/test_pages/`
 
-### In Development
+### Not Yet Implemented
 
-- History tracking with SQLite persistence
-- Full mouse action support
-- Full keyboard action support
-- Download management
-- File chooser handling
+- Authentication (`--abp-auth-token` flag defined but not enforced)
 - Network interception
+- Cookie management
+- Window management (resize, move, minimize, maximize)
+- Tab pin/mute/duplicate
+- Full-page screenshots (viewport only currently)

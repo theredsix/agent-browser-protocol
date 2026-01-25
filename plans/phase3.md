@@ -1,4 +1,22 @@
-# Phase 3: Dialogs, Downloads, File Chooser & Browser Control
+# Phase 3: Dialogs, Downloads, File Chooser & Browser Control - COMPLETE
+
+**Status: FULLY IMPLEMENTED**
+
+All core features for Phase 3 are implemented:
+- [x] Dialog endpoints (GET /dialog, POST /dialog/accept, POST /dialog/dismiss)
+- [x] Download list/status/cancel endpoints (GET /downloads, GET /downloads/{id}, POST /downloads/{id}/cancel)
+- [x] File chooser handling (POST /file-chooser/{id})
+- [x] Browser status endpoint (GET /browser/status)
+- [x] Browser shutdown endpoint (POST /browser/shutdown)
+- [x] Binary screenshot endpoint (GET /tabs/{id}/screenshot returns WebP)
+- [x] AbpDownloadObserver for tracking downloads
+- [x] Pending dialog and file chooser state management
+
+Not yet implemented (lower priority):
+- [ ] Download configuration endpoint (POST /downloads/config) - use --abp-config instead
+- [ ] Download wait endpoint (POST /downloads/wait)
+- [ ] File chooser configuration (auto-select, defaults)
+- [ ] Browser info endpoint (GET /browser) - use GET /browser/status instead
 
 ## Goal
 

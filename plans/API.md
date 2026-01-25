@@ -1,5 +1,31 @@
 # Agent Browser Protocol - API Specification
 
+## Implementation Status
+
+This document specifies the complete ABP REST API. The following table shows current implementation status:
+
+| Category | Implemented | Planned |
+|----------|-------------|---------|
+| Tab Management | list, create, close, get, activate, stop | pin, mute, duplicate, move |
+| Navigation | navigate, back, forward, reload | - |
+| Mouse | click, move, scroll | drag, hover, mouse down/up |
+| Keyboard | type, press, down, up | shortcut, insert |
+| Screenshots | viewport (GET/POST), markup | full-page, region |
+| JavaScript | execute | - |
+| Dialogs | get, accept, dismiss | - |
+| Downloads | list, get, cancel | configure, wait, resume |
+| File Chooser | provide files | configure, get pending |
+| Browser | status, shutdown | get info |
+| Execution Control | get/set state | - |
+| Network | - | intercept, requests |
+| Window | - | bounds, state |
+| Cookies | - | get, set, clear |
+| Wait | duration wait | navigation, network idle |
+
+Features marked "Planned" are documented below but not yet implemented.
+
+---
+
 ## Base URL
 
 ```
@@ -7,6 +33,8 @@ http://localhost:8222/api/v1
 ```
 
 ## Authentication
+
+**Not Yet Implemented**
 
 If `--abp-auth-token` is set, all requests must include:
 

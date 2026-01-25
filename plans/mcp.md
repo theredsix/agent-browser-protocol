@@ -1,5 +1,36 @@
 # Agent Browser Protocol - MCP Server Specification
 
+## Implementation Status
+
+**Location:** `tools/abp-mcp-server/`
+
+The MCP server is implemented in TypeScript and provides a bridge between AI agents (like Claude) and the ABP REST API.
+
+### Implemented Tools (14 total)
+
+| Tool | Description | REST Endpoint |
+|------|-------------|---------------|
+| `browser_get_status` | Get browser status | `GET /browser/status` |
+| `browser_get_info` | Get browser info | `GET /browser/status` |
+| `browser_list_tabs` | List all tabs | `GET /tabs` |
+| `browser_new_tab` | Create new tab | `POST /tabs` |
+| `browser_close_tab` | Close a tab | `DELETE /tabs/{id}` |
+| `browser_get_tab_info` | Get tab details | `GET /tabs/{id}` |
+| `browser_navigate` | Navigate to URL | `POST /tabs/{id}/navigate` |
+| `browser_go_back` | Go back in history | `POST /tabs/{id}/back` |
+| `browser_go_forward` | Go forward in history | `POST /tabs/{id}/forward` |
+| `browser_reload` | Reload page | `POST /tabs/{id}/reload` |
+| `browser_click` | Click at coordinates | `POST /tabs/{id}/click` |
+| `browser_type` | Type text | `POST /tabs/{id}/type` |
+| `browser_screenshot` | Take screenshot | `POST /tabs/{id}/screenshot` |
+| `browser_execute_javascript` | Execute JavaScript | `POST /tabs/{id}/execute` |
+
+### Not Yet Implemented in MCP Server
+
+The following tools are documented below as planned features but are not yet implemented in the MCP server. The underlying REST endpoints may or may not exist.
+
+---
+
 ## Overview
 
 The ABP MCP Server exposes browser control capabilities through the Model Context Protocol (MCP), enabling AI agents to interact with the browser using standardized tool calls. The MCP server acts as a bridge between MCP-compatible AI systems and the ABP REST API.

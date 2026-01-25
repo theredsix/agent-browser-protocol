@@ -1,4 +1,20 @@
-# V8 Virtual Clock + Debugger Pause for ABP Actions
+# V8 Virtual Clock + Debugger Pause for ABP Actions - IMPLEMENTED
+
+**Status: FULLY IMPLEMENTED**
+
+The execution control system is implemented in:
+- `AbpActionContext` class (`abp_action_context.h/cc`) - Unified action flow with pause/resume
+- `AbpController::execution_states_` - Per-tab execution state tracking
+- `GET/POST /api/v1/tabs/{id}/execution` - API endpoints for manual control
+
+Features implemented:
+- [x] Virtual time policy control via CDP `Emulation.setVirtualTimePolicy`
+- [x] Debugger pause/resume via CDP `Debugger.pause`/`Debugger.resume`
+- [x] Automatic resume before actions, pause after
+- [x] `--abp-disable-pause` flag to disable automatic pause
+- [x] AbpActionContext for consistent action flow
+
+---
 
 ## Goal
 After each ABP input action (+ wait_until) completes:
