@@ -6,22 +6,22 @@
 
 ```mermaid
 flowchart LR
-  A[AI Agent] -->|POST /api/v1/tabs/{id}/click\n{"x": 450, "y": 320}| B[ABP Chromium]
+  A[AI Agent] -->|POST /api/v1/tabs/TAB_ID/click<br/>x=450, y=320| B[ABP Chromium]
   B --> C1[Inject real input event]
   C1 --> D1[Wait for page to settle]
   D1 --> E1[Capture screenshot (compositor output)]
-  E1 --> F1[Return events since last step\n(e.g., tab_created)]
+  E1 --> F1[Return events since last step<br/>(e.g., tab_created)]
   F1 --> P1[Pause JavaScript + virtual time]
-  P1 -->|200 OK\n{"screenshot": "...", "events": [{"type":"tab_created","tab_id": 2}, ...]}| A
+  P1 -->|200 OK<br/>screenshot + events (tab_created → tab_id=2)| A
 
-  A -->|POST /api/v1/tabs/2/type\n{"text": "Show HN"}| B
+  A -->|POST /api/v1/tabs/2/type<br/>text="Show HN"| B
   B --> U2[Unpause JavaScript + virtual time]
   U2 --> C2[Inject real keyboard events]
   C2 --> D2[Wait for page to settle]
   D2 --> E2[Capture screenshot (compositor output)]
   E2 --> F2[Return events since last step]
   F2 --> P2[Pause JavaScript + virtual time]
-  P2 -->|200 OK\n{"screenshot": "...", "events": [...]}| A
+  P2 -->|200 OK<br/>screenshot + events| A
 ```
 
 No WebSocket. No CDP session management. No Puppeteer abstraction layers.
