@@ -1,6 +1,7 @@
 #ifndef CHROME_BROWSER_ABP_ABP_HTTP_SERVER_H_
 #define CHROME_BROWSER_ABP_ABP_HTTP_SERVER_H_
 
+#include <map>
 #include <memory>
 #include <string>
 
@@ -12,6 +13,7 @@ class AbpController;
 class AbpDownloadObserver;
 class AbpEventObserver;
 class AbpHistoryController;
+class AbpMcpHandler;
 
 // HTTP server for ABP REST API.
 // Created on UI thread, runs server callbacks on IO thread,
@@ -48,7 +50,8 @@ class AbpHttpServer : public net::HttpServer::Delegate {
   void HandleRequestOnUI(int connection_id,
                          std::string method,
                          std::string path,
-                         std::string body);
+                         std::string body,
+                         std::map<std::string, std::string> headers);
   void OnResponseReady(int connection_id,
                        int status_code,
                        const std::string& content_type,
@@ -64,6 +67,7 @@ class AbpHttpServer : public net::HttpServer::Delegate {
   std::unique_ptr<AbpHistoryController> history_controller_;  // UI thread only
   std::unique_ptr<AbpEventObserver> event_observer_;  // UI thread only
   std::unique_ptr<AbpDownloadObserver> download_observer_;  // UI thread only
+  std::unique_ptr<AbpMcpHandler> mcp_handler_;  // UI thread only
 };
 
 }  // namespace abp

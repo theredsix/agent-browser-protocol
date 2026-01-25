@@ -21,6 +21,8 @@ source_set("abp") {
     "abp_history_database.h",
     "abp_http_server.cc",
     "abp_http_server.h",
+    "abp_mcp_handler.cc",
+    "abp_mcp_handler.h",
     "abp_switches.cc",
     "abp_switches.h",
   ]

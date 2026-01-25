@@ -10,24 +10,23 @@ The ABP MCP Server is embedded directly in the Chromium browser, exposing browse
 
 The MCP server is implemented in C++ as part of `AbpHttpServer`, handling MCP Streamable HTTP transport alongside the existing REST API.
 
-### Implemented Tools (14 total)
+### Implemented Tools (13 total)
 
 | Tool | Description | REST Endpoint |
 |------|-------------|---------------|
-| `browser_get_status` | Get browser status | `GET /browser/status` |
-| `browser_get_info` | Get browser info | `GET /browser/status` |
-| `browser_list_tabs` | List all tabs | `GET /tabs` |
-| `browser_new_tab` | Create new tab | `POST /tabs` |
-| `browser_close_tab` | Close a tab | `DELETE /tabs/{id}` |
-| `browser_get_tab_info` | Get tab details | `GET /tabs/{id}` |
-| `browser_navigate` | Navigate to URL | `POST /tabs/{id}/navigate` |
-| `browser_go_back` | Go back in history | `POST /tabs/{id}/back` |
-| `browser_go_forward` | Go forward in history | `POST /tabs/{id}/forward` |
-| `browser_reload` | Reload page | `POST /tabs/{id}/reload` |
-| `browser_click` | Click at coordinates | `POST /tabs/{id}/click` |
-| `browser_type` | Type text | `POST /tabs/{id}/type` |
-| `browser_screenshot` | Take screenshot | `POST /tabs/{id}/screenshot` |
-| `browser_execute_javascript` | Execute JavaScript | `POST /tabs/{id}/execute` |
+| `browser_get_status` | Get browser status | `GET /api/v1/browser/status` |
+| `browser_list_tabs` | List all tabs | `GET /api/v1/tabs` |
+| `browser_new_tab` | Create new tab | `POST /api/v1/tabs` |
+| `browser_close_tab` | Close a tab | `DELETE /api/v1/tabs/{id}` |
+| `browser_get_tab_info` | Get tab details | `GET /api/v1/tabs/{id}` |
+| `browser_navigate` | Navigate to URL | `POST /api/v1/tabs/{id}/navigate` |
+| `browser_go_back` | Go back in history | `POST /api/v1/tabs/{id}/back` |
+| `browser_go_forward` | Go forward in history | `POST /api/v1/tabs/{id}/forward` |
+| `browser_reload` | Reload page | `POST /api/v1/tabs/{id}/reload` |
+| `browser_click` | Click at coordinates | `POST /api/v1/tabs/{id}/click` |
+| `browser_type` | Type text | `POST /api/v1/tabs/{id}/type` |
+| `browser_screenshot` | Take screenshot | `POST /api/v1/tabs/{id}/screenshot` |
+| `browser_execute_javascript` | Execute JavaScript | `POST /api/v1/tabs/{id}/execute` |
 
 ---
 
@@ -834,20 +833,20 @@ The tool names and parameters are identical - no changes needed to agent code.
 
 ## Implementation Phases
 
-### Phase 1: Basic MCP (MVP)
+### Phase 1: Basic MCP (MVP) - COMPLETE
 
-- [ ] Add `/mcp` endpoint routing in `abp_http_server.cc`
-- [ ] Implement `AbpMcpHandler` with JSON-RPC parsing
-- [ ] Support `initialize`, `tools/list`, `tools/call`
-- [ ] Map tools to direct `AbpController` calls
-- [ ] Single JSON response mode only
-- [ ] No session management (stateless)
+- [x] Add `/mcp` endpoint routing in `abp_http_server.cc`
+- [x] Implement `AbpMcpHandler` with JSON-RPC parsing
+- [x] Support `initialize`, `tools/list`, `tools/call`
+- [x] Map tools to direct `AbpController` calls
+- [x] Single JSON response mode only
+- [x] Session management with 30-minute timeout
 
-### Phase 2: Sessions and SSE
+### Phase 2: Sessions and SSE - PARTIAL
 
-- [ ] Add `AbpMcpSession` class
-- [ ] Implement session ID generation and tracking
-- [ ] Add session timeout cleanup
+- [x] Add `McpSession` struct
+- [x] Implement session ID generation and tracking
+- [x] Add session timeout cleanup
 - [ ] Support SSE response mode for tool calls
 - [ ] Implement GET stream for server notifications
 
@@ -862,7 +861,7 @@ The tool names and parameters are identical - no changes needed to agent code.
 - [ ] Add `MCP-Protocol-Version` header validation
 - [ ] Implement resumability with event IDs
 - [ ] Add metrics and logging
-- [ ] Remove deprecated Node.js MCP server
+- [x] Remove deprecated Node.js MCP server
 
 ---
 

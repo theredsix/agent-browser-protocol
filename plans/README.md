@@ -1043,7 +1043,7 @@ The MCP server exposes all ABP functionality as tools that AI systems like Claud
 - **History tracking**: SQLite persistence with before/after screenshots
 - **Virtual cursor**: compositor-layer rendering via Mojo IPC
 - **Browser control**: get status, shutdown
-- **MCP Server**: 14 tools for AI agent integration
+- **MCP Server**: Embedded C++ implementation with 13 tools (Streamable HTTP transport)
 - **Test harness**: Integration tests in `chrome/browser/abp/test_pages/`
 
 ### Not Yet Implemented

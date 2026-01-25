@@ -42,16 +42,8 @@ chrome/browser/abp/
 ├── BUILD.gn              # Build configuration
 ├── abp_switches.h/cc     # --enable-abp, --abp-port flags
 ├── abp_http_server.h/cc  # HTTP server (IO thread)
-└── abp_controller.h/cc   # Request handler + CDP client (UI thread)
-```
-
-### MCP Server
-
-```
-tools/abp-mcp-server/
-├── package.json          # Node.js package
-├── tsconfig.json         # TypeScript config
-└── src/index.ts          # MCP server bridging to ABP REST API
+├── abp_controller.h/cc   # Request handler + CDP client (UI thread)
+└── abp_mcp_handler.h/cc  # Embedded MCP server (JSON-RPC over HTTP)
 ```
 
 ### Design Documentation
@@ -175,29 +167,31 @@ curl -X DELETE http://localhost:8222/api/v1/tabs/{tab_id}
 
 ### MCP Server
 
-The MCP server bridges AI agents (like Claude) to the ABP REST API:
-
-```bash
-# Build and run MCP server
-cd tools/abp-mcp-server
-npm install
-npm run build
-npm start
-```
+The MCP server is embedded directly in Chrome—no separate process needed. It's available at `/mcp` on the same port as the REST API.
 
 Configure in Claude Desktop (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
     "browser": {
-      "command": "node",
-      "args": ["/path/to/chromium/tools/abp-mcp-server/dist/index.js"],
-      "env": {
-        "ABP_URL": "http://localhost:8222"
-      }
+      "transport": "streamable-http",
+      "url": "http://localhost:8222/mcp"
     }
   }
 }
+```
+
+Test the MCP endpoint:
+```bash
+# Initialize MCP session
+curl -X POST http://localhost:8222/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"test","version":"1.0"},"capabilities":{}}}'
+
+# List available tools
+curl -X POST http://localhost:8222/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 ```
 
 ## API Reference

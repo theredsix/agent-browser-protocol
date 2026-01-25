@@ -308,13 +308,7 @@ See [plans/API.md](plans/API.md) for complete specification.
 
 ## MCP Server
 
-Connect Claude or any MCP-compatible AI directly to ABP:
-
-```bash
-cd tools/abp-mcp-server
-npm install && npm run build
-npm start
-```
+The MCP server is embedded directly in Chrome—no separate process needed. It implements the MCP Streamable HTTP transport (protocol version 2025-03-26) at the `/mcp` endpoint.
 
 Configure in Claude Desktop (`claude_desktop_config.json`):
 
@@ -322,15 +316,16 @@ Configure in Claude Desktop (`claude_desktop_config.json`):
 {
   "mcpServers": {
     "browser": {
-      "command": "node",
-      "args": ["/path/to/abp-mcp-server/dist/index.js"],
-      "env": {"ABP_URL": "http://localhost:8222"}
+      "transport": "streamable-http",
+      "url": "http://localhost:8222/mcp"
     }
   }
 }
 ```
 
 Then ask Claude: "Go to news.ycombinator.com and find the top post about AI."
+
+Available tools: `browser_get_status`, `browser_list_tabs`, `browser_new_tab`, `browser_close_tab`, `browser_get_tab_info`, `browser_navigate`, `browser_go_back`, `browser_go_forward`, `browser_reload`, `browser_click`, `browser_type`, `browser_screenshot`, `browser_execute_javascript`
 
 ---
 
@@ -400,10 +395,8 @@ First build takes 4-6 hours. Incremental builds take seconds to minutes.
 chrome/browser/abp/           # Core ABP implementation
   abp_http_server.cc/h        # HTTP server (IO thread)
   abp_controller.cc/h         # Request handling (UI thread)
+  abp_mcp_handler.cc/h        # Embedded MCP server (JSON-RPC over HTTP)
   abp_switches.cc/h           # Command line flags
-
-tools/abp-mcp-server/         # MCP server (TypeScript)
-  src/index.ts                # Tool definitions and handlers
 
 plans/                        # Design documents
   API.md                      # REST API specification

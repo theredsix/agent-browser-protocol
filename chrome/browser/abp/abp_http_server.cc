@@ -14,6 +14,7 @@
 #include "chrome/browser/abp/abp_download_observer.h"
 #include "chrome/browser/abp/abp_event_observer.h"
 #include "chrome/browser/abp/abp_history_controller.h"
+#include "chrome/browser/abp/abp_mcp_handler.h"
 #include "chrome/browser/abp/abp_switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/ip_endpoint.h"
@@ -99,6 +100,9 @@ void AbpHttpServer::Start() {
   download_observer_->Start();
   controller_->SetDownloadObserver(download_observer_.get());
 
+  // Create MCP handler
+  mcp_handler_ = std::make_unique<AbpMcpHandler>(controller_.get());
+
   // Safe to use Unretained because AbpHttpServer is a singleton that lives
   // for the lifetime of the browser process.
   content::GetIOThreadTaskRunner({})->PostTask(
@@ -164,6 +168,14 @@ void AbpHttpServer::OnHttpRequest(int connection_id,
                                   const net::HttpServerRequestInfo& info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
+  // Copy headers for MCP handling
+  std::map<std::string, std::string> headers;
+  for (const auto& pair : info.headers) {
+    // Convert header names to lowercase for consistent lookup
+    std::string lower_name = base::ToLowerASCII(pair.first);
+    headers[lower_name] = pair.second;
+  }
+
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&AbpHttpServer::HandleRequestOnUI,
@@ -171,7 +183,8 @@ void AbpHttpServer::OnHttpRequest(int connection_id,
                      connection_id,
                      info.method,
                      info.path,
-                     info.data));
+                     info.data,
+                     std::move(headers)));
 }
 
 void AbpHttpServer::OnWebSocketRequest(int connection_id,
@@ -187,21 +200,29 @@ void AbpHttpServer::OnClose(int connection_id) {}
 void AbpHttpServer::HandleRequestOnUI(int connection_id,
                                       std::string method,
                                       std::string path,
-                                      std::string body) {
+                                      std::string body,
+                                      std::map<std::string, std::string> headers) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   auto callback = base::BindOnce(&AbpHttpServer::OnResponseReady,
                                  base::Unretained(this),
                                  connection_id);
 
-  // Route history requests to history controller
-  // Path format: /api/v1/history/...
+  // Route MCP requests to MCP handler
+  // Path format: /mcp
   std::string clean_path = path;
   size_t query_pos = path.find('?');
   if (query_pos != std::string::npos) {
     clean_path = path.substr(0, query_pos);
   }
 
+  if (clean_path == "/mcp") {
+    mcp_handler_->HandleRequest(method, headers, body, std::move(callback));
+    return;
+  }
+
+  // Route history requests to history controller
+  // Path format: /api/v1/history/...
   if (base::StartsWith(clean_path, "/api/v1/history",
                        base::CompareCase::SENSITIVE)) {
     if (history_controller_) {
