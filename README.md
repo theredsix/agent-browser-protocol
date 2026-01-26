@@ -493,13 +493,12 @@ See [TESTING.md](TESTING.md) for the complete test matrix, test page documentati
 
 ---
 
+## Maintainers
+* Han Wang ([@theredsix](https://github.com/theredsix))
+
 ## Contributing
 
-ABP is a substantial fork of Chromium. Contributions welcome, but please:
-
-1. Open an issue first to discuss major changes
-2. Follow Chromium's coding style for C++ code
-3. Add tests for new functionality
+ABP is a substantial fork of Chromium. Contributions welcome, please reach out to a maintainer about contributing.
 
 ---
 
