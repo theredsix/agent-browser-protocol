@@ -249,6 +249,7 @@ vs-chromium-project.txt
 /orderfiles
 /out*/
 /dist/
+/.worktrees/
 /remoting/android/internal/
 /remoting/appengine/
 /remoting/host/installer/chrome-remote-desktop_*.buildinfo
