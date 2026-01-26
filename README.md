@@ -337,7 +337,7 @@ Available tools: `browser_get_status`, `browser_list_tabs`, `browser_new_tab`, `
 | Feature | ABP | CDP/Puppeteer | Playwright | Selenium |
 |---------|-----|---------------|------------|----------|
 | REST API | Yes | No (WebSocket) | No (RPC) | Yes |
-| JS execution pause | Engine-level | Debugger (breaks page) | No | No |
+| JS execution pause | Engine-level | Debugger | No | No |
 | Virtual time | Yes | No | No | No |
 | Virtual cursor | Compositor | No | No | No |
 | Action screenshots | Automatic | Manual | Manual | Manual |
