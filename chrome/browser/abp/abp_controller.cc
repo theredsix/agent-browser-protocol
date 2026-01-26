@@ -6,6 +6,7 @@
 
 #include "base/base64.h"
 #include "chrome/browser/abp/abp_action_context.h"
+#include "chrome/browser/abp/abp_input_dispatcher.h"
 #include "base/command_line.h"
 #include "chrome/browser/abp/abp_switches.h"
 #include "base/containers/span.h"
@@ -44,12 +45,6 @@
 
 namespace abp {
 
-// ActionContext implementation
-ActionContext::ActionContext() = default;
-ActionContext::~ActionContext() = default;
-ActionContext::ActionContext(ActionContext&&) = default;
-ActionContext& ActionContext::operator=(ActionContext&&) = default;
-
 // KeyInfo implementation
 KeyInfo::KeyInfo() = default;
 KeyInfo::KeyInfo(const std::string& k,
@@ -84,6 +79,36 @@ AbpController::PendingDialog::~PendingDialog() = default;
 AbpController::PendingDialog::PendingDialog(const PendingDialog&) = default;
 AbpController::PendingDialog& AbpController::PendingDialog::operator=(
     const PendingDialog&) = default;
+
+// TabState implementation
+AbpController::TabState::TabState() = default;
+AbpController::TabState::~TabState() = default;
+AbpController::TabState::TabState(TabState&&) = default;
+AbpController::TabState& AbpController::TabState::operator=(TabState&&) = default;
+
+bool AbpController::TabState::IsIdle() const {
+  return !cdp_client && !cursor.active && !execution.debugger_enabled &&
+         held_keys.held_keys.empty() && !pending_dialog.has_value() &&
+         !action_waiter;
+}
+
+void AbpController::TabState::Reset() {
+  cdp_client.reset();
+  cursor = VirtualCursorState{};
+  execution = ExecutionState{};
+  held_keys = HeldKeyState{};
+  pending_dialog.reset();
+  action_waiter.reset();
+}
+
+AbpController::TabState& AbpController::GetOrCreateTabState(
+    const std::string& tab_id) {
+  return tab_states_[tab_id];
+}
+
+void AbpController::CleanupTabState(const std::string& tab_id) {
+  tab_states_.erase(tab_id);
+}
 
 namespace {
 
@@ -387,7 +412,8 @@ AbpController::ScreenshotOptions& AbpController::ScreenshotOptions::operator=(
 // AbpController implementation
 
 AbpController::AbpController()
-    : event_collector_(std::make_unique<AbpEventCollector>(this)) {}
+    : event_collector_(std::make_unique<AbpEventCollector>(this)),
+      input_dispatcher_(std::make_unique<AbpInputDispatcher>(this)) {}
 
 AbpController::~AbpController() = default;
 
@@ -446,10 +472,10 @@ void AbpController::CenterMouseInActiveTab() {
   scoped_refptr<content::DevToolsAgentHost> host =
       content::DevToolsAgentHost::GetOrCreateForTab(wc);
   if (host) {
-    VirtualCursorState& state = virtual_cursor_states_[host->GetId()];
-    state.active = true;
-    state.x = center_x;
-    state.y = center_y;
+    TabState& tab_state = GetOrCreateTabState(host->GetId());
+    tab_state.cursor.active = true;
+    tab_state.cursor.x = center_x;
+    tab_state.cursor.y = center_y;
   }
 
   // First, set the virtual cursor position so it appears in screenshots
@@ -742,26 +768,6 @@ void AbpController::OnHistoryScreenshotCaptured(
           },
           screenshot_path, std::move(*decoded)),
       std::move(callback));
-}
-
-void AbpController::RecordCompletedAction(
-    const ActionContext& context,
-    const base::Value* result,
-    bool success,
-    const std::string& error_code,
-    const std::string& error_message,
-    const std::string& screenshot_after_path) {
-  if (!history_controller_) {
-    return;
-  }
-
-  int64_t end_time = base::Time::Now().InMillisecondsSinceUnixEpoch();
-  int64_t duration_ms = end_time - context.start_time;
-
-  history_controller_->RecordAction(
-      context.tab_id, context.action_type, context.params, result, success,
-      error_code, error_message, context.start_time, duration_ms,
-      context.screenshot_before_path, screenshot_after_path);
 }
 
 void AbpController::HandleRequest(const std::string& method,
@@ -1120,10 +1126,7 @@ void AbpController::CloseTab(const std::string& tab_id,
       auto host = content::DevToolsAgentHost::GetOrCreateFor(wc);
       if (host->GetId() == tab_id) {
         // Clean up all per-tab state
-        cdp_clients_.erase(tab_id);
-        execution_states_.erase(tab_id);
-        virtual_cursor_states_.erase(tab_id);
-        held_keys_state_.erase(tab_id);
+        CleanupTabState(tab_id);
         tab_strip->CloseWebContentsAt(i, TabCloseTypes::CLOSE_USER_GESTURE);
 
         base::Value::Dict result;
@@ -1201,81 +1204,6 @@ void AbpController::Navigate(const std::string& tab_id,
       std::move(callback));
 }
 
-void AbpController::OnNavigateBeforeScreenshot(
-    const std::string& tab_id,
-    const std::string& url,
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_before_path) {
-  if (context) {
-    context->screenshot_before_path = screenshot_before_path;
-  }
-
-  content::WebContents* wc = FindWebContents(tab_id);
-  if (!wc) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "TAB_NOT_FOUND", "Tab not found", context->start_time, 0,
-          context->screenshot_before_path, "");
-    }
-    SendError(404, "Tab not found", std::move(callback));
-    return;
-  }
-
-  // NOTE: For navigate, we do NOT integrate with execution control.
-  // Navigation is async and the page needs to run JS to complete loading.
-  // If execution is paused, user should resume manually before navigate.
-  DispatchNavigateEvent(tab_id, url, std::move(context), std::move(callback));
-}
-
-void AbpController::DispatchNavigateEvent(
-    const std::string& tab_id,
-    const std::string& url,
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback) {
-  content::WebContents* wc = FindWebContents(tab_id);
-  if (!wc) {
-    SendError(404, "Tab not found", std::move(callback));
-    return;
-  }
-
-  GURL gurl(url);
-  wc->GetController().LoadURL(gurl, content::Referrer(),
-                              ui::PAGE_TRANSITION_TYPED, std::string());
-
-  // Use centralized action completion with wait
-  // This will wait for page load, network idle, etc. before taking screenshot
-  base::Value::Dict result;
-  result.Set("status", "navigated");
-  result.Set("url", url);
-  CompleteActionWithScreenshot(tab_id, std::move(context), std::move(result),
-                               std::move(callback));
-}
-
-void AbpController::OnNavigateAfterScreenshot(
-    const std::string& url,
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_after_path) {
-  // Legacy callback - kept for compatibility but no longer used
-  base::Value::Dict result;
-  result.Set("status", "navigated");
-  result.Set("url", url);
-
-  if (history_controller_ && context) {
-    int64_t duration_ms =
-        base::Time::Now().InMillisecondsSinceUnixEpoch() - context->start_time;
-    base::Value result_value(result.Clone());
-    history_controller_->RecordAction(
-        context->tab_id, context->action_type, context->params, &result_value,
-        true, "", "", context->start_time, duration_ms,
-        context->screenshot_before_path, screenshot_after_path);
-  }
-
-  SendJson(200, base::Value(std::move(result)), std::move(callback));
-}
-
 void AbpController::Reload(const std::string& tab_id,
                            ResponseCallback callback) {
   base::Value::Dict params;  // Empty params for reload
@@ -1303,57 +1231,6 @@ void AbpController::Reload(const std::string& tab_id,
         ctx->OnActionDispatched();
       }),
       std::move(callback));
-}
-
-void AbpController::OnReloadBeforeScreenshot(
-    const std::string& tab_id,
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_before_path) {
-  if (context) {
-    context->screenshot_before_path = screenshot_before_path;
-  }
-
-  content::WebContents* wc = FindWebContents(tab_id);
-  if (!wc) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "TAB_NOT_FOUND", "Tab not found", context->start_time, 0,
-          context->screenshot_before_path, "");
-    }
-    SendError(404, "Tab not found", std::move(callback));
-    return;
-  }
-
-  wc->GetController().Reload(content::ReloadType::NORMAL, false);
-
-  // Use centralized action completion with wait
-  base::Value::Dict result;
-  result.Set("status", "reloaded");
-  CompleteActionWithScreenshot(tab_id, std::move(context), std::move(result),
-                               std::move(callback));
-}
-
-void AbpController::OnReloadAfterScreenshot(
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_after_path) {
-  // Legacy callback - kept for compatibility but no longer used
-  base::Value::Dict result;
-  result.Set("status", "reloaded");
-
-  if (history_controller_ && context) {
-    int64_t duration_ms =
-        base::Time::Now().InMillisecondsSinceUnixEpoch() - context->start_time;
-    base::Value result_value(result.Clone());
-    history_controller_->RecordAction(
-        context->tab_id, context->action_type, context->params, &result_value,
-        true, "", "", context->start_time, duration_ms,
-        context->screenshot_before_path, screenshot_after_path);
-  }
-
-  SendJson(200, base::Value(std::move(result)), std::move(callback));
 }
 
 void AbpController::GoBack(const std::string& tab_id,
@@ -1396,57 +1273,6 @@ void AbpController::GoBack(const std::string& tab_id,
       std::move(callback));
 }
 
-void AbpController::OnGoBackBeforeScreenshot(
-    const std::string& tab_id,
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_before_path) {
-  if (context) {
-    context->screenshot_before_path = screenshot_before_path;
-  }
-
-  content::WebContents* wc = FindWebContents(tab_id);
-  if (!wc) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "TAB_NOT_FOUND", "Tab not found", context->start_time, 0,
-          context->screenshot_before_path, "");
-    }
-    SendError(404, "Tab not found", std::move(callback));
-    return;
-  }
-
-  wc->GetController().GoBack();
-
-  // Use centralized action completion with wait
-  base::Value::Dict result;
-  result.Set("status", "navigated_back");
-  CompleteActionWithScreenshot(tab_id, std::move(context), std::move(result),
-                               std::move(callback));
-}
-
-void AbpController::OnGoBackAfterScreenshot(
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_after_path) {
-  // Legacy callback - kept for compatibility but no longer used
-  base::Value::Dict result;
-  result.Set("status", "navigated_back");
-
-  if (history_controller_ && context) {
-    int64_t duration_ms =
-        base::Time::Now().InMillisecondsSinceUnixEpoch() - context->start_time;
-    base::Value result_value(result.Clone());
-    history_controller_->RecordAction(
-        context->tab_id, context->action_type, context->params, &result_value,
-        true, "", "", context->start_time, duration_ms,
-        context->screenshot_before_path, screenshot_after_path);
-  }
-
-  SendJson(200, base::Value(std::move(result)), std::move(callback));
-}
-
 void AbpController::GoForward(const std::string& tab_id,
                               ResponseCallback callback) {
   // Early validation - check if we can go forward before starting context
@@ -1485,57 +1311,6 @@ void AbpController::GoForward(const std::string& tab_id,
         ctx->OnActionDispatched();
       }),
       std::move(callback));
-}
-
-void AbpController::OnGoForwardBeforeScreenshot(
-    const std::string& tab_id,
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_before_path) {
-  if (context) {
-    context->screenshot_before_path = screenshot_before_path;
-  }
-
-  content::WebContents* wc = FindWebContents(tab_id);
-  if (!wc) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "TAB_NOT_FOUND", "Tab not found", context->start_time, 0,
-          context->screenshot_before_path, "");
-    }
-    SendError(404, "Tab not found", std::move(callback));
-    return;
-  }
-
-  wc->GetController().GoForward();
-
-  // Use centralized action completion with wait
-  base::Value::Dict result;
-  result.Set("status", "navigated_forward");
-  CompleteActionWithScreenshot(tab_id, std::move(context), std::move(result),
-                               std::move(callback));
-}
-
-void AbpController::OnGoForwardAfterScreenshot(
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_after_path) {
-  // Legacy callback - kept for compatibility but no longer used
-  base::Value::Dict result;
-  result.Set("status", "navigated_forward");
-
-  if (history_controller_ && context) {
-    int64_t duration_ms =
-        base::Time::Now().InMillisecondsSinceUnixEpoch() - context->start_time;
-    base::Value result_value(result.Clone());
-    history_controller_->RecordAction(
-        context->tab_id, context->action_type, context->params, &result_value,
-        true, "", "", context->start_time, duration_ms,
-        context->screenshot_before_path, screenshot_after_path);
-  }
-
-  SendJson(200, base::Value(std::move(result)), std::move(callback));
 }
 
 void AbpController::Screenshot(const std::string& tab_id,
@@ -1673,10 +1448,10 @@ void AbpController::Screenshot(const std::string& tab_id,
     bool cursor_visible = false;
 
     if (!host_id.empty()) {
-      auto it = virtual_cursor_states_.find(host_id);
-      if (it != virtual_cursor_states_.end() && it->second.active) {
-        cursor_x = it->second.x;
-        cursor_y = it->second.y;
+      auto it = tab_states_.find(host_id);
+      if (it != tab_states_.end() && it->second.cursor.active) {
+        cursor_x = it->second.cursor.x;
+        cursor_y = it->second.cursor.y;
         cursor_visible = true;
       }
     }
@@ -1792,10 +1567,10 @@ void AbpController::OnMarkupInjected(const std::string& tab_id,
     bool cursor_visible = false;
 
     if (!host_id.empty()) {
-      auto it = virtual_cursor_states_.find(host_id);
-      if (it != virtual_cursor_states_.end() && it->second.active) {
-        cursor_x = it->second.x;
-        cursor_y = it->second.y;
+      auto it = tab_states_.find(host_id);
+      if (it != tab_states_.end() && it->second.cursor.active) {
+        cursor_x = it->second.cursor.x;
+        cursor_y = it->second.cursor.y;
         cursor_visible = true;
       }
     }
@@ -2121,466 +1896,19 @@ void AbpController::OnExecuteScriptResult(ResponseCallback callback,
 void AbpController::Click(const std::string& tab_id,
                           const base::Value::Dict& params,
                           ResponseCallback callback) {
-  // Validate params early
-  auto x_opt = params.FindDouble("x");
-  auto y_opt = params.FindDouble("y");
-  if (!x_opt || !y_opt) {
-    SendError(400, "Missing 'x' or 'y' parameter", std::move(callback));
-    return;
-  }
-
-  double click_x = *x_opt;
-  double click_y = *y_opt;
-
-  // Use AbpActionContext for unified action flow:
-  // Resume -> BeforeScreenshot -> Action -> Wait -> Pause -> AfterScreenshot -> Response
-  AbpActionContext::Run(
-      this, tab_id, "click", params,
-      // Action callback - performs the actual click
-      base::BindOnce(
-          [](double coord_x, double coord_y, AbpActionContext* ctx) {
-            // Update virtual cursor state via controller
-            ctx->controller()->UpdateVirtualCursorState(ctx->tab_id(), coord_x, coord_y);
-
-            AbpCdpClient* client = ctx->client();
-            if (!client) {
-              ctx->OnActionError("CDP_ERROR", "CDP client lost");
-              return;
-            }
-
-            // Set virtual cursor position via CDP overlay
-            base::Value::Dict cursor_config;
-            cursor_config.Set("x", coord_x);
-            cursor_config.Set("y", coord_y);
-            cursor_config.Set("visible", true);
-
-            base::Value::Dict cursor_params;
-            cursor_params.Set("cursorConfig", std::move(cursor_config));
-
-            // Take a scoped_refptr to keep context alive through async calls
-            scoped_refptr<AbpActionContext> ctx_ref(ctx);
-
-            client->SendCommand(
-                "Overlay.setVirtualCursor", std::move(cursor_params),
-                base::BindOnce(
-                    [](double x, double y,
-                       scoped_refptr<AbpActionContext> action_ctx, bool success,
-                       const std::string& result) {
-                      // Ignore cursor set result - proceed with click regardless
-                      AbpCdpClient* cdp_client = action_ctx->client();
-                      if (!cdp_client) {
-                        action_ctx->OnActionError("CDP_ERROR", "CDP client lost");
-                        return;
-                      }
-
-                      // Send mousePressed
-                      base::Value::Dict press_params;
-                      press_params.Set("type", "mousePressed");
-                      press_params.Set("x", x);
-                      press_params.Set("y", y);
-                      press_params.Set("button", "left");
-                      press_params.Set("clickCount", 1);
-
-                      cdp_client->SendCommand(
-                          "Input.dispatchMouseEvent", std::move(press_params),
-                          base::BindOnce(
-                              [](double rel_x, double rel_y,
-                                 scoped_refptr<AbpActionContext> ctx,
-                                 bool success, const std::string& result) {
-                                if (!success) {
-                                  ctx->OnActionError("CDP_ERROR", result);
-                                  return;
-                                }
-
-                                AbpCdpClient* client = ctx->client();
-                                if (!client) {
-                                  ctx->OnActionError("CDP_ERROR", "CDP client lost");
-                                  return;
-                                }
-
-                                // Send mouseReleased
-                                base::Value::Dict release_params;
-                                release_params.Set("type", "mouseReleased");
-                                release_params.Set("x", rel_x);
-                                release_params.Set("y", rel_y);
-                                release_params.Set("button", "left");
-                                release_params.Set("clickCount", 1);
-
-                                client->SendCommand(
-                                    "Input.dispatchMouseEvent", std::move(release_params),
-                                    base::BindOnce(
-                                        [](scoped_refptr<AbpActionContext> c,
-                                           bool success,
-                                           const std::string& result) {
-                                          if (!success) {
-                                            c->OnActionError("CDP_ERROR", result);
-                                            return;
-                                          }
-
-                                          // Set result and signal action complete
-                                          base::Value::Dict res;
-                                          res.Set("status", "clicked");
-                                          c->SetResult(std::move(res));
-                                          c->OnActionDispatched();
-                                        },
-                                        ctx));
-                              },
-                              x, y, action_ctx));
-                    },
-                    coord_x, coord_y, ctx_ref));
-          },
-          click_x, click_y),
-      std::move(callback));
-}
-
-void AbpController::OnClickBeforeScreenshot(
-    const std::string& tab_id,
-    double x,
-    double y,
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_before_path) {
-  if (context) {
-    context->screenshot_before_path = screenshot_before_path;
-  }
-
-  content::WebContents* wc = FindWebContents(tab_id);
-  if (!wc) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "TAB_NOT_FOUND", "Tab not found", context->start_time, 0,
-          context->screenshot_before_path, "");
-    }
-    SendError(404, "Tab not found", std::move(callback));
-    return;
-  }
-
-  AbpCdpClient* client = GetOrCreateCdpClient(wc);
-  if (!client) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "CDP_ERROR", "Failed to create CDP client", context->start_time,
-          0, context->screenshot_before_path, "");
-    }
-    SendError(500, "Failed to create CDP client", std::move(callback));
-    return;
-  }
-
-  // If execution control is enabled, resume before the click
-  auto it = execution_states_.find(tab_id);
-  if (it != execution_states_.end() && it->second.debugger_enabled) {
-    ResumeExecution(
-        tab_id,
-        base::BindOnce(
-            [](base::WeakPtr<AbpController> controller, std::string tid,
-               double x, double y, std::unique_ptr<ActionContext> ctx,
-               ResponseCallback cb) {
-              if (!controller) {
-                return;
-              }
-              controller->DispatchClickEvent(tid, x, y, std::move(ctx),
-                                             std::move(cb));
-            },
-            weak_factory_.GetWeakPtr(), tab_id, x, y, std::move(context),
-            std::move(callback)));
-    return;
-  }
-
-  // No execution control, dispatch click directly
-  DispatchClickEvent(tab_id, x, y, std::move(context), std::move(callback));
-}
-
-void AbpController::DispatchClickEvent(const std::string& tab_id,
-                                       double x,
-                                       double y,
-                                       std::unique_ptr<ActionContext> context,
-                                       ResponseCallback callback) {
-  content::WebContents* wc = FindWebContents(tab_id);
-  if (!wc) {
-    SendError(404, "Tab not found", std::move(callback));
-    return;
-  }
-
-  AbpCdpClient* client = GetOrCreateCdpClient(wc);
-  if (!client) {
-    SendError(500, "Failed to create CDP client", std::move(callback));
-    return;
-  }
-
-  // CDP: Input.dispatchMouseEvent (mousePressed then mouseReleased)
-  base::Value::Dict cdp_params;
-  cdp_params.Set("type", "mousePressed");
-  cdp_params.Set("x", x);
-  cdp_params.Set("y", y);
-  cdp_params.Set("button", "left");
-  cdp_params.Set("clickCount", 1);
-
-  client->SendCommand(
-      "Input.dispatchMouseEvent", cdp_params,
-      base::BindOnce(
-          [](base::WeakPtr<AbpController> controller, std::string tab_id,
-             double x, double y, std::unique_ptr<ActionContext> ctx,
-             ResponseCallback cb, bool success, const std::string& result) {
-            if (!controller) {
-              return;
-            }
-            if (!success) {
-              if (controller->history_controller_) {
-                controller->history_controller_->RecordAction(
-                    ctx->tab_id, ctx->action_type, ctx->params, nullptr, false,
-                    "CDP_ERROR", result, ctx->start_time, 0,
-                    ctx->screenshot_before_path, "");
-              }
-              controller->SendError(500, result, std::move(cb));
-              return;
-            }
-            controller->OnClickPressedResult(tab_id, x, y, std::move(ctx),
-                                             std::move(cb), success, result);
-          },
-          weak_factory_.GetWeakPtr(), tab_id, x, y, std::move(context),
-          std::move(callback)));
-}
-
-void AbpController::OnClickPressedResult(const std::string& tab_id,
-                                         double x,
-                                         double y,
-                                         std::unique_ptr<ActionContext> context,
-                                         ResponseCallback callback,
-                                         bool success,
-                                         const std::string& result) {
-  if (!success) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "CDP_ERROR", result, context->start_time, 0,
-          context->screenshot_before_path, "");
-    }
-    SendError(500, result, std::move(callback));
-    return;
-  }
-
-  content::WebContents* wc = FindWebContents(tab_id);
-  if (!wc) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "TAB_NOT_FOUND", "Tab not found", context->start_time, 0,
-          context->screenshot_before_path, "");
-    }
-    SendError(404, "Tab not found", std::move(callback));
-    return;
-  }
-
-  AbpCdpClient* client = GetOrCreateCdpClient(wc);
-  if (!client) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "CDP_ERROR", "Failed to create CDP client", context->start_time,
-          0, context->screenshot_before_path, "");
-    }
-    SendError(500, "Failed to create CDP client", std::move(callback));
-    return;
-  }
-
-  base::Value::Dict release_params;
-  release_params.Set("type", "mouseReleased");
-  release_params.Set("x", x);
-  release_params.Set("y", y);
-  release_params.Set("button", "left");
-  release_params.Set("clickCount", 1);
-
-  client->SendCommand(
-      "Input.dispatchMouseEvent", release_params,
-      base::BindOnce(&AbpController::OnClickResult, weak_factory_.GetWeakPtr(),
-                     std::move(context), std::move(callback)));
-}
-
-void AbpController::OnClickResult(std::unique_ptr<ActionContext> context,
-                                  ResponseCallback callback,
-                                  bool success,
-                                  const std::string& result) {
-  if (!success) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "CDP_ERROR", result, context->start_time, 0,
-          context->screenshot_before_path, "");
-    }
-    SendError(500, result, std::move(callback));
-    return;
-  }
-
-  // Use centralized action completion with wait
-  std::string tab_id = context ? context->tab_id : "";
-  base::Value::Dict response;
-  response.Set("status", "clicked");
-  CompleteActionWithScreenshot(tab_id, std::move(context), std::move(response),
-                               std::move(callback));
-}
-
-void AbpController::OnClickAfterScreenshot(
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_after_path) {
-  // Legacy callback - kept for compatibility but no longer used
-  base::Value::Dict response;
-  response.Set("status", "clicked");
-
-  if (history_controller_ && context) {
-    int64_t duration_ms =
-        base::Time::Now().InMillisecondsSinceUnixEpoch() - context->start_time;
-    base::Value result_value(response.Clone());
-    history_controller_->RecordAction(
-        context->tab_id, context->action_type, context->params, &result_value,
-        true, "", "", context->start_time, duration_ms,
-        context->screenshot_before_path, screenshot_after_path);
-  }
-
-  SendJson(200, base::Value(std::move(response)), std::move(callback));
+  input_dispatcher_->Click(tab_id, params, std::move(callback));
 }
 
 void AbpController::Type(const std::string& tab_id,
                          const base::Value::Dict& params,
                          ResponseCallback callback) {
-  // Validate params early
-  const std::string* text = params.FindString("text");
-  if (!text) {
-    SendError(400, "Missing 'text' parameter", std::move(callback));
-    return;
-  }
-
-  std::string text_copy = *text;
-
-  // Use AbpActionContext for unified action flow:
-  // Resume -> BeforeScreenshot -> Action -> Wait -> Pause -> AfterScreenshot -> Response
-  AbpActionContext::Run(
-      this, tab_id, "type", params,
-      // Action callback - performs the actual type
-      base::BindOnce(
-          [](std::string text, AbpActionContext* ctx) {
-            AbpCdpClient* client = ctx->client();
-            if (!client) {
-              ctx->OnActionError("CDP_ERROR", "CDP client lost");
-              return;
-            }
-
-            // Take a scoped_refptr to keep context alive through async call
-            scoped_refptr<AbpActionContext> ctx_ref(ctx);
-
-            // CDP: Input.insertText - simpler than key events
-            base::Value::Dict cdp_params;
-            cdp_params.Set("text", text);
-
-            client->SendCommand(
-                "Input.insertText", std::move(cdp_params),
-                base::BindOnce(
-                    [](scoped_refptr<AbpActionContext> action_ctx, bool success,
-                       const std::string& result) {
-                      if (!success) {
-                        action_ctx->OnActionError("CDP_ERROR", result);
-                        return;
-                      }
-
-                      // Set result and signal action complete
-                      base::Value::Dict res;
-                      res.Set("status", "typed");
-                      action_ctx->SetResult(std::move(res));
-                      action_ctx->OnActionDispatched();
-                    },
-                    ctx_ref));
-          },
-          std::move(text_copy)),
-      std::move(callback));
+  input_dispatcher_->Type(tab_id, params, std::move(callback));
 }
 
 void AbpController::Move(const std::string& tab_id,
                          const base::Value::Dict& params,
                          ResponseCallback callback) {
-  // Validate params early
-  auto x_opt = params.FindDouble("x");
-  auto y_opt = params.FindDouble("y");
-  if (!x_opt || !y_opt) {
-    SendError(400, "Missing 'x' or 'y' parameter", std::move(callback));
-    return;
-  }
-
-  double move_x = *x_opt;
-  double move_y = *y_opt;
-
-  // Use AbpActionContext for unified action flow
-  AbpActionContext::Run(
-      this, tab_id, "move", params,
-      // Action callback - performs the cursor move
-      base::BindOnce(
-          [](double coord_x, double coord_y, AbpActionContext* ctx) {
-            // Update virtual cursor state via controller
-            ctx->controller()->UpdateVirtualCursorState(ctx->tab_id(), coord_x, coord_y);
-
-            AbpCdpClient* client = ctx->client();
-            if (!client) {
-              ctx->OnActionError("CDP_ERROR", "CDP client lost");
-              return;
-            }
-
-            // Set virtual cursor position via CDP overlay
-            base::Value::Dict cursor_config;
-            cursor_config.Set("x", coord_x);
-            cursor_config.Set("y", coord_y);
-            cursor_config.Set("visible", true);
-
-            base::Value::Dict cursor_params;
-            cursor_params.Set("cursorConfig", std::move(cursor_config));
-
-            // Take a scoped_refptr to keep context alive through async calls
-            scoped_refptr<AbpActionContext> ctx_ref(ctx);
-
-            client->SendCommand(
-                "Overlay.setVirtualCursor", std::move(cursor_params),
-                base::BindOnce(
-                    [](double x, double y,
-                       scoped_refptr<AbpActionContext> action_ctx, bool success,
-                       const std::string& result) {
-                      // Ignore cursor set result - proceed regardless
-                      AbpCdpClient* cdp_client = action_ctx->client();
-                      if (!cdp_client) {
-                        action_ctx->OnActionError("CDP_ERROR", "CDP client lost");
-                        return;
-                      }
-
-                      // Send mouseMoved event
-                      base::Value::Dict move_params;
-                      move_params.Set("type", "mouseMoved");
-                      move_params.Set("x", x);
-                      move_params.Set("y", y);
-
-                      cdp_client->SendCommand(
-                          "Input.dispatchMouseEvent", std::move(move_params),
-                          base::BindOnce(
-                              [](double final_x, double final_y,
-                                 scoped_refptr<AbpActionContext> ctx,
-                                 bool success, const std::string& result) {
-                                if (!success) {
-                                  ctx->OnActionError("CDP_ERROR", result);
-                                  return;
-                                }
-
-                                // Set result and signal action complete
-                                base::Value::Dict res;
-                                res.Set("status", "moved");
-                                res.Set("x", final_x);
-                                res.Set("y", final_y);
-                                ctx->SetResult(std::move(res));
-                                ctx->OnActionDispatched();
-                              },
-                              x, y, action_ctx));
-                    },
-                    coord_x, coord_y, ctx_ref));
-          },
-          move_x, move_y),
-      std::move(callback));
+  input_dispatcher_->Move(tab_id, params, std::move(callback));
 }
 
 void AbpController::Wait(const std::string& tab_id,
@@ -2635,462 +1963,25 @@ void AbpController::Wait(const std::string& tab_id,
 void AbpController::Scroll(const std::string& tab_id,
                            const base::Value::Dict& params,
                            ResponseCallback callback) {
-  // Get scroll coordinates (default to center of viewport if not specified)
-  double x = params.FindDouble("x").value_or(500);
-  double y = params.FindDouble("y").value_or(500);
-  double delta_x = params.FindDouble("delta_x").value_or(0);
-  double delta_y = params.FindDouble("delta_y").value_or(0);
-
-  if (delta_x == 0 && delta_y == 0) {
-    SendError(400, "At least one of 'delta_x' or 'delta_y' must be non-zero",
-              std::move(callback));
-    return;
-  }
-
-  // Use AbpActionContext for unified action flow
-  AbpActionContext::Run(
-      this, tab_id, "scroll", params,
-      // Action callback - performs the scroll
-      base::BindOnce(
-          [](double scroll_x, double scroll_y, double dx, double dy,
-             AbpActionContext* ctx) {
-            AbpCdpClient* client = ctx->client();
-            if (!client) {
-              ctx->OnActionError("CDP_ERROR", "CDP client lost");
-              return;
-            }
-
-            // Take a scoped_refptr to keep context alive
-            scoped_refptr<AbpActionContext> ctx_ref(ctx);
-
-            // Send mouseWheel event via CDP
-            base::Value::Dict wheel_params;
-            wheel_params.Set("type", "mouseWheel");
-            wheel_params.Set("x", scroll_x);
-            wheel_params.Set("y", scroll_y);
-            wheel_params.Set("deltaX", dx);
-            wheel_params.Set("deltaY", dy);
-
-            client->SendCommand(
-                "Input.dispatchMouseEvent", std::move(wheel_params),
-                base::BindOnce(
-                    [](double final_x, double final_y, double final_dx,
-                       double final_dy, scoped_refptr<AbpActionContext> action_ctx,
-                       bool success, const std::string& result) {
-                      if (!success) {
-                        action_ctx->OnActionError("CDP_ERROR", result);
-                        return;
-                      }
-
-                      base::Value::Dict res;
-                      res.Set("status", "scrolled");
-                      res.Set("x", final_x);
-                      res.Set("y", final_y);
-                      res.Set("delta_x", final_dx);
-                      res.Set("delta_y", final_dy);
-                      action_ctx->SetResult(std::move(res));
-                      action_ctx->OnActionDispatched();
-                    },
-                    scroll_x, scroll_y, dx, dy, ctx_ref));
-          },
-          x, y, delta_x, delta_y),
-      std::move(callback));
+  input_dispatcher_->Scroll(tab_id, params, std::move(callback));
 }
 
 void AbpController::KeyPress(const std::string& tab_id,
                              const base::Value::Dict& params,
                              ResponseCallback callback) {
-  const std::string* key = params.FindString("key");
-  if (!key || key->empty()) {
-    SendError(400, "Missing 'key' parameter", std::move(callback));
-    return;
-  }
-
-  // Get modifiers from params
-  std::vector<std::string> modifiers;
-  const base::Value::List* mod_list = params.FindList("modifiers");
-  if (mod_list) {
-    for (const auto& mod : *mod_list) {
-      if (mod.is_string()) {
-        modifiers.push_back(mod.GetString());
-      }
-    }
-  }
-
-  std::string key_copy = *key;
-
-  // Use AbpActionContext for unified action flow
-  AbpActionContext::Run(
-      this, tab_id, "key_press", params,
-      base::BindOnce(
-          [](std::string pressed_key, std::vector<std::string> mods,
-             AbpActionContext* ctx) {
-            AbpCdpClient* client = ctx->client();
-            if (!client) {
-              ctx->OnActionError("CDP_ERROR", "CDP client lost");
-              return;
-            }
-
-            scoped_refptr<AbpActionContext> ctx_ref(ctx);
-            KeyInfo key_info = GetKeyInfo(pressed_key);
-            int mod_flags = ModifiersToFlags(mods);
-
-            // Helper to send a key event
-            auto send_key_event = [](AbpCdpClient* cdp_client,
-                                     const std::string& type,
-                                     const KeyInfo& info, int modifiers,
-                                     base::OnceCallback<void(bool, const std::string&)>
-                                         callback) {
-              base::Value::Dict key_params;
-              key_params.Set("type", type);
-              key_params.Set("key", info.key);
-              key_params.Set("code", info.code);
-              key_params.Set("windowsVirtualKeyCode", info.windows_virtual_key);
-              key_params.Set("nativeVirtualKeyCode", info.native_virtual_key);
-              key_params.Set("modifiers", modifiers);
-              cdp_client->SendCommand("Input.dispatchKeyEvent",
-                                      std::move(key_params), std::move(callback));
-            };
-
-            // For shortcuts with modifiers: press modifiers down, press key, release key, release modifiers
-            // For simple key press: just keyDown + keyUp
-
-            if (mods.empty()) {
-              // Simple key press: keyDown then keyUp
-              send_key_event(
-                  client, "keyDown", key_info, mod_flags,
-                  base::BindOnce(
-                      [](KeyInfo info, int flags, AbpCdpClient* cdp_client,
-                         scoped_refptr<AbpActionContext> action_ctx, bool success,
-                         const std::string& result) {
-                        if (!success) {
-                          action_ctx->OnActionError("CDP_ERROR", result);
-                          return;
-                        }
-
-                        // Now send keyUp
-                        base::Value::Dict up_params;
-                        up_params.Set("type", "keyUp");
-                        up_params.Set("key", info.key);
-                        up_params.Set("code", info.code);
-                        up_params.Set("windowsVirtualKeyCode", info.windows_virtual_key);
-                        up_params.Set("nativeVirtualKeyCode", info.native_virtual_key);
-                        up_params.Set("modifiers", flags);
-
-                        cdp_client->SendCommand(
-                            "Input.dispatchKeyEvent", std::move(up_params),
-                            base::BindOnce(
-                                [](std::string key_name,
-                                   scoped_refptr<AbpActionContext> ctx, bool success,
-                                   const std::string& result) {
-                                  if (!success) {
-                                    ctx->OnActionError("CDP_ERROR", result);
-                                    return;
-                                  }
-
-                                  base::Value::Dict res;
-                                  res.Set("status", "pressed");
-                                  res.Set("key", key_name);
-                                  ctx->SetResult(std::move(res));
-                                  ctx->OnActionDispatched();
-                                },
-                                info.key, action_ctx));
-                      },
-                      key_info, mod_flags, client, ctx_ref));
-            } else {
-              // Shortcut: need to press modifiers first, then key, then release in reverse
-              // For simplicity, we'll send all modifier keyDowns, then main key down+up, then modifier keyUps
-
-              // This is a bit complex - we need to chain multiple CDP calls
-              // Let's do it step by step using a state machine approach
-
-              // First, press all modifier keys down
-              struct ShortcutState {
-                std::vector<std::string> modifiers;
-                KeyInfo main_key;
-                int mod_flags;
-                size_t mod_index = 0;
-                raw_ptr<AbpCdpClient> client;
-                scoped_refptr<AbpActionContext> ctx;
-
-                void PressNextModifier() {
-                  if (mod_index < modifiers.size()) {
-                    KeyInfo mod_info = GetKeyInfo(modifiers[mod_index]);
-                    mod_index++;
-
-                    base::Value::Dict params;
-                    params.Set("type", "keyDown");
-                    params.Set("key", mod_info.key);
-                    params.Set("code", mod_info.code);
-                    params.Set("windowsVirtualKeyCode", mod_info.windows_virtual_key);
-                    params.Set("nativeVirtualKeyCode", mod_info.native_virtual_key);
-                    // Modifiers accumulate as we press them
-                    int current_mods = 0;
-                    for (size_t i = 0; i < mod_index; i++) {
-                      KeyInfo ki = GetKeyInfo(modifiers[i]);
-                      current_mods |= ki.modifier_flag;
-                    }
-                    params.Set("modifiers", current_mods);
-
-                    client->SendCommand(
-                        "Input.dispatchKeyEvent", std::move(params),
-                        base::BindOnce(
-                            [](ShortcutState* state, bool success,
-                               const std::string& result) {
-                              if (!success) {
-                                state->ctx->OnActionError("CDP_ERROR", result);
-                                delete state;
-                                return;
-                              }
-                              state->PressNextModifier();
-                            },
-                            base::Unretained(this)));
-                  } else {
-                    // All modifiers pressed, now press the main key
-                    PressMainKey();
-                  }
-                }
-
-                void PressMainKey() {
-                  base::Value::Dict params;
-                  params.Set("type", "keyDown");
-                  params.Set("key", main_key.key);
-                  params.Set("code", main_key.code);
-                  params.Set("windowsVirtualKeyCode", main_key.windows_virtual_key);
-                  params.Set("nativeVirtualKeyCode", main_key.native_virtual_key);
-                  params.Set("modifiers", mod_flags);
-
-                  client->SendCommand(
-                      "Input.dispatchKeyEvent", std::move(params),
-                      base::BindOnce(
-                          [](ShortcutState* state, bool success,
-                             const std::string& result) {
-                            if (!success) {
-                              state->ctx->OnActionError("CDP_ERROR", result);
-                              delete state;
-                              return;
-                            }
-                            state->ReleaseMainKey();
-                          },
-                          base::Unretained(this)));
-                }
-
-                void ReleaseMainKey() {
-                  base::Value::Dict params;
-                  params.Set("type", "keyUp");
-                  params.Set("key", main_key.key);
-                  params.Set("code", main_key.code);
-                  params.Set("windowsVirtualKeyCode", main_key.windows_virtual_key);
-                  params.Set("nativeVirtualKeyCode", main_key.native_virtual_key);
-                  params.Set("modifiers", mod_flags);
-
-                  client->SendCommand(
-                      "Input.dispatchKeyEvent", std::move(params),
-                      base::BindOnce(
-                          [](ShortcutState* state, bool success,
-                             const std::string& result) {
-                            if (!success) {
-                              state->ctx->OnActionError("CDP_ERROR", result);
-                              delete state;
-                              return;
-                            }
-                            state->mod_index = state->modifiers.size();
-                            state->ReleaseNextModifier();
-                          },
-                          base::Unretained(this)));
-                }
-
-                void ReleaseNextModifier() {
-                  if (mod_index > 0) {
-                    mod_index--;
-                    KeyInfo mod_info = GetKeyInfo(modifiers[mod_index]);
-
-                    // Calculate remaining modifiers
-                    int remaining_mods = 0;
-                    for (size_t i = 0; i < mod_index; i++) {
-                      KeyInfo ki = GetKeyInfo(modifiers[i]);
-                      remaining_mods |= ki.modifier_flag;
-                    }
-
-                    base::Value::Dict params;
-                    params.Set("type", "keyUp");
-                    params.Set("key", mod_info.key);
-                    params.Set("code", mod_info.code);
-                    params.Set("windowsVirtualKeyCode", mod_info.windows_virtual_key);
-                    params.Set("nativeVirtualKeyCode", mod_info.native_virtual_key);
-                    params.Set("modifiers", remaining_mods);
-
-                    client->SendCommand(
-                        "Input.dispatchKeyEvent", std::move(params),
-                        base::BindOnce(
-                            [](ShortcutState* state, bool success,
-                               const std::string& result) {
-                              if (!success) {
-                                state->ctx->OnActionError("CDP_ERROR", result);
-                                delete state;
-                                return;
-                              }
-                              state->ReleaseNextModifier();
-                            },
-                            base::Unretained(this)));
-                  } else {
-                    // All done!
-                    base::Value::Dict res;
-                    res.Set("status", "pressed");
-                    res.Set("key", main_key.key);
-                    base::Value::List mod_list;
-                    for (const auto& m : modifiers) {
-                      mod_list.Append(m);
-                    }
-                    res.Set("modifiers", std::move(mod_list));
-                    ctx->SetResult(std::move(res));
-                    ctx->OnActionDispatched();
-                    delete this;
-                  }
-                }
-              };
-
-              auto* state = new ShortcutState();
-              state->modifiers = std::move(mods);
-              state->main_key = key_info;
-              state->mod_flags = mod_flags;
-              state->client = client;
-              state->ctx = ctx_ref;
-              state->PressNextModifier();
-            }
-          },
-          std::move(key_copy), std::move(modifiers)),
-      std::move(callback));
+  input_dispatcher_->KeyPress(tab_id, params, std::move(callback));
 }
 
 void AbpController::KeyDown(const std::string& tab_id,
                             const base::Value::Dict& params,
                             ResponseCallback callback) {
-  const std::string* key = params.FindString("key");
-  if (!key || key->empty()) {
-    SendError(400, "Missing 'key' parameter", std::move(callback));
-    return;
-  }
-
-  std::string key_copy = *key;
-
-  // Use AbpActionContext for unified action flow
-  AbpActionContext::Run(
-      this, tab_id, "key_down", params,
-      base::BindOnce(
-          [](std::string pressed_key, AbpController* controller,
-             AbpActionContext* ctx) {
-            AbpCdpClient* client = ctx->client();
-            if (!client) {
-              ctx->OnActionError("CDP_ERROR", "CDP client lost");
-              return;
-            }
-
-            scoped_refptr<AbpActionContext> ctx_ref(ctx);
-            KeyInfo key_info = GetKeyInfo(pressed_key);
-
-            // Track the held key
-            auto& held_state = controller->held_keys_state_[ctx->tab_id()];
-            held_state.held_keys.insert(pressed_key);
-            if (key_info.is_modifier) {
-              held_state.current_modifiers |= key_info.modifier_flag;
-            }
-
-            int current_mods = held_state.current_modifiers;
-
-            base::Value::Dict key_params;
-            key_params.Set("type", "keyDown");
-            key_params.Set("key", key_info.key);
-            key_params.Set("code", key_info.code);
-            key_params.Set("windowsVirtualKeyCode", key_info.windows_virtual_key);
-            key_params.Set("nativeVirtualKeyCode", key_info.native_virtual_key);
-            key_params.Set("modifiers", current_mods);
-
-            client->SendCommand(
-                "Input.dispatchKeyEvent", std::move(key_params),
-                base::BindOnce(
-                    [](std::string key_name, scoped_refptr<AbpActionContext> action_ctx,
-                       bool success, const std::string& result) {
-                      if (!success) {
-                        action_ctx->OnActionError("CDP_ERROR", result);
-                        return;
-                      }
-
-                      base::Value::Dict res;
-                      res.Set("status", "key_down");
-                      res.Set("key", key_name);
-                      action_ctx->SetResult(std::move(res));
-                      action_ctx->OnActionDispatched();
-                    },
-                    pressed_key, ctx_ref));
-          },
-          std::move(key_copy), this),
-      std::move(callback));
+  input_dispatcher_->KeyDown(tab_id, params, std::move(callback));
 }
 
 void AbpController::KeyUp(const std::string& tab_id,
                           const base::Value::Dict& params,
                           ResponseCallback callback) {
-  const std::string* key = params.FindString("key");
-  if (!key || key->empty()) {
-    SendError(400, "Missing 'key' parameter", std::move(callback));
-    return;
-  }
-
-  std::string key_copy = *key;
-
-  // Use AbpActionContext for unified action flow
-  AbpActionContext::Run(
-      this, tab_id, "key_up", params,
-      base::BindOnce(
-          [](std::string released_key, AbpController* controller,
-             AbpActionContext* ctx) {
-            AbpCdpClient* client = ctx->client();
-            if (!client) {
-              ctx->OnActionError("CDP_ERROR", "CDP client lost");
-              return;
-            }
-
-            scoped_refptr<AbpActionContext> ctx_ref(ctx);
-            KeyInfo key_info = GetKeyInfo(released_key);
-
-            // Update held key tracking
-            auto& held_state = controller->held_keys_state_[ctx->tab_id()];
-            held_state.held_keys.erase(released_key);
-            if (key_info.is_modifier) {
-              held_state.current_modifiers &= ~key_info.modifier_flag;
-            }
-
-            int current_mods = held_state.current_modifiers;
-
-            base::Value::Dict key_params;
-            key_params.Set("type", "keyUp");
-            key_params.Set("key", key_info.key);
-            key_params.Set("code", key_info.code);
-            key_params.Set("windowsVirtualKeyCode", key_info.windows_virtual_key);
-            key_params.Set("nativeVirtualKeyCode", key_info.native_virtual_key);
-            key_params.Set("modifiers", current_mods);
-
-            client->SendCommand(
-                "Input.dispatchKeyEvent", std::move(key_params),
-                base::BindOnce(
-                    [](std::string key_name, scoped_refptr<AbpActionContext> action_ctx,
-                       bool success, const std::string& result) {
-                      if (!success) {
-                        action_ctx->OnActionError("CDP_ERROR", result);
-                        return;
-                      }
-
-                      base::Value::Dict res;
-                      res.Set("status", "key_up");
-                      res.Set("key", key_name);
-                      action_ctx->SetResult(std::move(res));
-                      action_ctx->OnActionDispatched();
-                    },
-                    released_key, ctx_ref));
-          },
-          std::move(key_copy), this),
-      std::move(callback));
+  input_dispatcher_->KeyUp(tab_id, params, std::move(callback));
 }
 
 void AbpController::ActivateTab(const std::string& tab_id,
@@ -3175,134 +2066,6 @@ void AbpController::StopLoading(const std::string& tab_id,
   SendJson(200, base::Value(std::move(result)), std::move(callback));
 }
 
-void AbpController::OnTypeBeforeScreenshot(
-    const std::string& tab_id,
-    const std::string& text,
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_before_path) {
-  if (context) {
-    context->screenshot_before_path = screenshot_before_path;
-  }
-
-  content::WebContents* wc = FindWebContents(tab_id);
-  if (!wc) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "TAB_NOT_FOUND", "Tab not found", context->start_time, 0,
-          context->screenshot_before_path, "");
-    }
-    SendError(404, "Tab not found", std::move(callback));
-    return;
-  }
-
-  AbpCdpClient* client = GetOrCreateCdpClient(wc);
-  if (!client) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(
-          context->tab_id, context->action_type, context->params, nullptr,
-          false, "CDP_ERROR", "Failed to create CDP client", context->start_time,
-          0, context->screenshot_before_path, "");
-    }
-    SendError(500, "Failed to create CDP client", std::move(callback));
-    return;
-  }
-
-  // If execution control is enabled, resume before the type action
-  auto it = execution_states_.find(tab_id);
-  if (it != execution_states_.end() && it->second.debugger_enabled) {
-    ResumeExecution(
-        tab_id,
-        base::BindOnce(
-            [](base::WeakPtr<AbpController> controller, std::string tid,
-               std::string txt, std::unique_ptr<ActionContext> ctx,
-               ResponseCallback cb) {
-              if (!controller) {
-                return;
-              }
-              controller->DispatchTypeEvent(tid, txt, std::move(ctx),
-                                            std::move(cb));
-            },
-            weak_factory_.GetWeakPtr(), tab_id, text, std::move(context),
-            std::move(callback)));
-    return;
-  }
-
-  // No execution control, dispatch type directly
-  DispatchTypeEvent(tab_id, text, std::move(context), std::move(callback));
-}
-
-void AbpController::DispatchTypeEvent(const std::string& tab_id,
-                                      const std::string& text,
-                                      std::unique_ptr<ActionContext> context,
-                                      ResponseCallback callback) {
-  content::WebContents* wc = FindWebContents(tab_id);
-  if (!wc) {
-    SendError(404, "Tab not found", std::move(callback));
-    return;
-  }
-
-  AbpCdpClient* client = GetOrCreateCdpClient(wc);
-  if (!client) {
-    SendError(500, "Failed to create CDP client", std::move(callback));
-    return;
-  }
-
-  // CDP: Input.insertText - simpler than key events
-  base::Value::Dict cdp_params;
-  cdp_params.Set("text", text);
-
-  client->SendCommand(
-      "Input.insertText", cdp_params,
-      base::BindOnce(&AbpController::OnTypeResult, weak_factory_.GetWeakPtr(),
-                     std::move(context), std::move(callback)));
-}
-
-void AbpController::OnTypeResult(std::unique_ptr<ActionContext> context,
-                                 ResponseCallback callback,
-                                 bool success,
-                                 const std::string& result) {
-  if (!success) {
-    if (history_controller_ && context) {
-      history_controller_->RecordAction(context->tab_id, context->action_type,
-                                        context->params, nullptr, false,
-                                        "CDP_ERROR", result, context->start_time,
-                                        0, context->screenshot_before_path, "");
-    }
-    SendError(500, result, std::move(callback));
-    return;
-  }
-
-  // Use centralized action completion with wait
-  std::string tab_id = context ? context->tab_id : "";
-  base::Value::Dict response;
-  response.Set("status", "typed");
-  CompleteActionWithScreenshot(tab_id, std::move(context), std::move(response),
-                               std::move(callback));
-}
-
-void AbpController::OnTypeAfterScreenshot(
-    std::unique_ptr<ActionContext> context,
-    ResponseCallback callback,
-    std::string screenshot_after_path) {
-  // Legacy callback - kept for compatibility but no longer used
-  base::Value::Dict response;
-  response.Set("status", "typed");
-
-  if (history_controller_ && context) {
-    int64_t duration_ms =
-        base::Time::Now().InMillisecondsSinceUnixEpoch() - context->start_time;
-    base::Value result_value(response.Clone());
-    history_controller_->RecordAction(
-        context->tab_id, context->action_type, context->params, &result_value,
-        true, "", "", context->start_time, duration_ms,
-        context->screenshot_before_path, screenshot_after_path);
-  }
-
-  SendJson(200, base::Value(std::move(response)), std::move(callback));
-}
-
 content::WebContents* AbpController::FindWebContents(
     const std::string& tab_id) {
   for (Browser* browser : *BrowserList::GetInstance()) {
@@ -3322,9 +2085,9 @@ AbpCdpClient* AbpController::GetOrCreateCdpClient(content::WebContents* wc) {
   auto host = content::DevToolsAgentHost::GetOrCreateFor(wc);
   const std::string& id = host->GetId();
 
-  auto it = cdp_clients_.find(id);
-  if (it != cdp_clients_.end()) {
-    return it->second.get();
+  TabState& state = GetOrCreateTabState(id);
+  if (state.cdp_client) {
+    return state.cdp_client.get();
   }
 
   auto client = std::make_unique<AbpCdpClient>(host);
@@ -3342,7 +2105,7 @@ AbpCdpClient* AbpController::GetOrCreateCdpClient(content::WebContents* wc) {
         if (controller->event_collector_) {
           controller->event_collector_->OnCdpEvent(tab, method, params);
         }
-        // Handle dialog events for pending_dialogs_ tracking
+        // Handle dialog events for pending_dialog tracking
         if (method == "Page.javascriptDialogOpening") {
           const std::string* type = params.FindString("type");
           const std::string* message = params.FindString("message");
@@ -3368,7 +2131,7 @@ AbpCdpClient* AbpController::GetOrCreateCdpClient(content::WebContents* wc) {
                        std::move(file_chooser_params),
                        base::BindOnce([](bool, const std::string&) {}));
 
-  cdp_clients_[id] = std::move(client);
+  state.cdp_client = std::move(client);
   return raw_ptr;
 }
 
@@ -3399,10 +2162,10 @@ void AbpController::UpdateVirtualCursorState(const std::string& tab_id,
   scoped_refptr<content::DevToolsAgentHost> host =
       content::DevToolsAgentHost::GetOrCreateForTab(wc);
   if (host) {
-    VirtualCursorState& state = virtual_cursor_states_[host->GetId()];
-    state.active = true;
-    state.x = x;
-    state.y = y;
+    TabState& tab_state = GetOrCreateTabState(host->GetId());
+    tab_state.cursor.active = true;
+    tab_state.cursor.x = x;
+    tab_state.cursor.y = y;
   }
 }
 
@@ -3490,7 +2253,7 @@ void AbpController::EnableExecutionControl(
   }
 
   // Check if already enabled
-  auto& state = execution_states_[tab_id];
+  auto& state = GetOrCreateTabState(tab_id).execution;
   if (state.debugger_enabled && state.virtual_time_enabled) {
     std::move(then).Run();
     return;
@@ -3517,7 +2280,7 @@ void AbpController::OnDebuggerEnabled(
     return;
   }
 
-  auto& state = execution_states_[tab_id];
+  auto& state = GetOrCreateTabState(tab_id).execution;
   state.debugger_enabled = true;
 
   content::WebContents* wc = FindWebContents(tab_id);
@@ -3556,7 +2319,7 @@ void AbpController::OnVirtualTimeEnabled(
     return;
   }
 
-  auto& state = execution_states_[tab_id];
+  auto& state = GetOrCreateTabState(tab_id).execution;
   state.virtual_time_enabled = true;
   state.paused = true;  // Started in paused state
 
@@ -3576,14 +2339,14 @@ void AbpController::OnVirtualTimeEnabled(
 
 void AbpController::ResumeExecution(const std::string& tab_id,
                                     base::OnceClosure then) {
-  auto it = execution_states_.find(tab_id);
-  if (it == execution_states_.end() || !it->second.debugger_enabled) {
+  auto it = tab_states_.find(tab_id);
+  if (it == tab_states_.end() || !it->second.execution.debugger_enabled) {
     // Execution control not enabled for this tab, just proceed
     std::move(then).Run();
     return;
   }
 
-  ExecutionState& state = it->second;
+  ExecutionState& state = it->second.execution;
   if (!state.paused) {
     // Already resumed
     std::move(then).Run();
@@ -3649,9 +2412,9 @@ void AbpController::OnVirtualTimeResumed(const std::string& tab_id,
     LOG(WARNING) << "ABP: setVirtualTimePolicy(advance) failed: " << result;
   }
 
-  auto it = execution_states_.find(tab_id);
-  if (it != execution_states_.end()) {
-    it->second.paused = false;
+  auto it = tab_states_.find(tab_id);
+  if (it != tab_states_.end()) {
+    it->second.execution.paused = false;
   }
 
   LOG(INFO) << "ABP: Execution resumed for tab " << tab_id;
@@ -3660,14 +2423,14 @@ void AbpController::OnVirtualTimeResumed(const std::string& tab_id,
 
 void AbpController::PauseExecution(const std::string& tab_id,
                                    base::OnceClosure then) {
-  auto it = execution_states_.find(tab_id);
-  if (it == execution_states_.end() || !it->second.debugger_enabled) {
+  auto it = tab_states_.find(tab_id);
+  if (it == tab_states_.end() || !it->second.execution.debugger_enabled) {
     // Execution control not enabled for this tab, just proceed
     std::move(then).Run();
     return;
   }
 
-  ExecutionState& state = it->second;
+  ExecutionState& state = it->second.execution;
   if (state.paused) {
     // Already paused
     std::move(then).Run();
@@ -3732,9 +2495,9 @@ void AbpController::OnDebuggerPaused(const std::string& tab_id,
     LOG(WARNING) << "ABP: Debugger.pause failed: " << result;
   }
 
-  auto it = execution_states_.find(tab_id);
-  if (it != execution_states_.end()) {
-    it->second.paused = true;
+  auto it = tab_states_.find(tab_id);
+  if (it != tab_states_.end()) {
+    it->second.execution.paused = true;
   }
 
   LOG(INFO) << "ABP: Execution paused for tab " << tab_id;
@@ -3751,9 +2514,9 @@ void AbpController::GetExecutionState(const std::string& tab_id,
 
   base::Value::Dict response;
 
-  auto it = execution_states_.find(tab_id);
-  if (it != execution_states_.end()) {
-    const ExecutionState& state = it->second;
+  auto it = tab_states_.find(tab_id);
+  if (it != tab_states_.end()) {
+    const ExecutionState& state = it->second.execution;
     response.Set("enabled", state.debugger_enabled && state.virtual_time_enabled);
     response.Set("paused", state.paused);
     response.Set("virtual_time_base_ms", state.virtual_time_base_ticks_ms);
@@ -3782,8 +2545,8 @@ void AbpController::SetExecutionState(const std::string& tab_id,
   }
 
   // Check if execution control is enabled for this tab
-  auto it = execution_states_.find(tab_id);
-  if (it == execution_states_.end() || !it->second.debugger_enabled) {
+  auto it = tab_states_.find(tab_id);
+  if (it == tab_states_.end() || !it->second.execution.debugger_enabled) {
     // Need to enable first
     std::optional<double> initial_time;
     auto init_time = params.FindDouble("initial_virtual_time");
@@ -3849,73 +2612,6 @@ void AbpController::SetExecutionState(const std::string& tab_id,
 }
 
 // =============================================================================
-// Centralized action completion with wait
-// =============================================================================
-
-void AbpController::CompleteActionWithScreenshot(
-    const std::string& tab_id,
-    std::unique_ptr<ActionContext> context,
-    base::Value::Dict result,
-    ResponseCallback callback) {
-  if (!context) {
-    // No context, just send response without recording
-    SendJson(200, base::Value(std::move(result)), std::move(callback));
-    return;
-  }
-
-  // If execution control is enabled, pause before waiting/screenshot
-  auto it = execution_states_.find(tab_id);
-  if (it != execution_states_.end() && it->second.debugger_enabled) {
-    PauseExecution(
-        tab_id,
-        base::BindOnce(&AbpController::OnWaitCompleteForAction,
-                       weak_factory_.GetWeakPtr(), tab_id, std::move(context),
-                       std::move(result), std::move(callback)));
-    return;
-  }
-
-  // Wait for action_complete conditions, then take screenshot
-  WaitForActionComplete(
-      tab_id,
-      base::BindOnce(&AbpController::OnWaitCompleteForAction,
-                     weak_factory_.GetWeakPtr(), tab_id, std::move(context),
-                     std::move(result), std::move(callback)));
-}
-
-void AbpController::OnWaitCompleteForAction(
-    const std::string& tab_id,
-    std::unique_ptr<ActionContext> context,
-    base::Value::Dict result,
-    ResponseCallback callback) {
-  // Take the after screenshot
-  CaptureScreenshotForHistory(
-      tab_id, context->start_time, false,
-      base::BindOnce(&AbpController::OnActionScreenshotCaptured,
-                     weak_factory_.GetWeakPtr(), std::move(context),
-                     std::move(result), std::move(callback)));
-}
-
-void AbpController::OnActionScreenshotCaptured(
-    std::unique_ptr<ActionContext> context,
-    base::Value::Dict result,
-    ResponseCallback callback,
-    std::string screenshot_after_path) {
-  // Record to history
-  if (history_controller_ && context) {
-    int64_t duration_ms =
-        base::Time::Now().InMillisecondsSinceUnixEpoch() - context->start_time;
-    base::Value result_value(result.Clone());
-    history_controller_->RecordAction(
-        context->tab_id, context->action_type, context->params, &result_value,
-        true, "", "", context->start_time, duration_ms,
-        context->screenshot_before_path, screenshot_after_path);
-  }
-
-  // Send response
-  SendJson(200, base::Value(std::move(result)), std::move(callback));
-}
-
-// =============================================================================
 // Action complete wait implementation
 // =============================================================================
 
@@ -3958,7 +2654,7 @@ void AbpController::WaitForActionComplete(const std::string& tab_id,
     waiter->dom_content_loaded_fired = true;
   }
 
-  action_waiters_[tab_id] = std::move(waiter);
+  GetOrCreateTabState(tab_id).action_waiter = std::move(waiter);
 
   // Set up event listener for CDP events
   client->SetEventListener(base::BindRepeating(
@@ -3996,12 +2692,12 @@ void AbpController::WaitForActionComplete(const std::string& tab_id,
 void AbpController::OnCdpEventForWait(const std::string& tab_id,
                                       const std::string& method,
                                       const base::Value::Dict& params) {
-  auto it = action_waiters_.find(tab_id);
-  if (it == action_waiters_.end()) {
+  auto it = tab_states_.find(tab_id);
+  if (it == tab_states_.end() || !it->second.action_waiter) {
     return;
   }
 
-  ActionCompleteWaiter* waiter = it->second.get();
+  ActionCompleteWaiter* waiter = it->second.action_waiter.get();
 
   // Track network events
   if (method == "Network.requestWillBeSent") {
@@ -4027,22 +2723,22 @@ void AbpController::OnCdpEventForWait(const std::string& tab_id,
 }
 
 void AbpController::OnMinWaitTimeElapsed(const std::string& tab_id) {
-  auto it = action_waiters_.find(tab_id);
-  if (it == action_waiters_.end()) {
+  auto it = tab_states_.find(tab_id);
+  if (it == tab_states_.end() || !it->second.action_waiter) {
     return;
   }
 
-  it->second->min_time_elapsed = true;
+  it->second.action_waiter->min_time_elapsed = true;
   CheckActionCompleteConditions(tab_id);
 }
 
 void AbpController::OnNetworkIdleCheck(const std::string& tab_id) {
-  auto it = action_waiters_.find(tab_id);
-  if (it == action_waiters_.end()) {
+  auto it = tab_states_.find(tab_id);
+  if (it == tab_states_.end() || !it->second.action_waiter) {
     return;
   }
 
-  ActionCompleteWaiter* waiter = it->second.get();
+  ActionCompleteWaiter* waiter = it->second.action_waiter.get();
 
   // Check if network has been idle (≤2 connections) for kNetworkIdleTime
   if (waiter->active_requests <= kNetworkIdleMaxConnections) {
@@ -4064,16 +2760,15 @@ void AbpController::OnNetworkIdleCheck(const std::string& tab_id) {
 }
 
 void AbpController::OnWaitTimeout(const std::string& tab_id) {
-  auto it = action_waiters_.find(tab_id);
-  if (it == action_waiters_.end()) {
+  auto it = tab_states_.find(tab_id);
+  if (it == tab_states_.end() || !it->second.action_waiter) {
     return;
   }
 
   LOG(WARNING) << "ABP: action_complete wait timed out for tab " << tab_id;
 
   // Force complete
-  std::unique_ptr<ActionCompleteWaiter> waiter = std::move(it->second);
-  action_waiters_.erase(it);
+  std::unique_ptr<ActionCompleteWaiter> waiter = std::move(it->second.action_waiter);
 
   // Clear event listener
   content::WebContents* wc = FindWebContents(tab_id);
@@ -4090,20 +2785,19 @@ void AbpController::OnWaitTimeout(const std::string& tab_id) {
 }
 
 void AbpController::CheckActionCompleteConditions(const std::string& tab_id) {
-  auto it = action_waiters_.find(tab_id);
-  if (it == action_waiters_.end()) {
+  auto it = tab_states_.find(tab_id);
+  if (it == tab_states_.end() || !it->second.action_waiter) {
     return;
   }
 
-  ActionCompleteWaiter* waiter = it->second.get();
+  ActionCompleteWaiter* waiter = it->second.action_waiter.get();
 
   if (!waiter->IsComplete()) {
     return;
   }
 
   // All conditions met!
-  std::unique_ptr<ActionCompleteWaiter> completed_waiter = std::move(it->second);
-  action_waiters_.erase(it);
+  std::unique_ptr<ActionCompleteWaiter> completed_waiter = std::move(it->second.action_waiter);
 
   // Clear event listener
   content::WebContents* wc = FindWebContents(tab_id);
@@ -4122,9 +2816,9 @@ void AbpController::CheckActionCompleteConditions(const std::string& tab_id) {
 }
 
 int64_t AbpController::GetVirtualTimeMs(const std::string& tab_id) {
-  auto it = execution_states_.find(tab_id);
-  if (it != execution_states_.end() && it->second.virtual_time_enabled) {
-    return static_cast<int64_t>(it->second.virtual_time_base_ticks_ms);
+  auto it = tab_states_.find(tab_id);
+  if (it != tab_states_.end() && it->second.execution.virtual_time_enabled) {
+    return static_cast<int64_t>(it->second.execution.virtual_time_base_ticks_ms);
   }
   return base::Time::Now().InMillisecondsSinceUnixEpoch();
 }
@@ -4289,15 +2983,16 @@ void AbpController::CaptureScreenshotBase64(
 
 void AbpController::GetDialog(const std::string& tab_id,
                               ResponseCallback callback) {
-  auto it = pending_dialogs_.find(tab_id);
+  auto it = tab_states_.find(tab_id);
 
   base::Value::Dict response;
-  if (it != pending_dialogs_.end()) {
+  if (it != tab_states_.end() && it->second.pending_dialog.has_value()) {
+    const PendingDialog& dialog = it->second.pending_dialog.value();
     response.Set("present", true);
-    response.Set("dialog_type", it->second.dialog_type);
-    response.Set("message", it->second.message);
-    if (!it->second.default_prompt.empty()) {
-      response.Set("default_prompt", it->second.default_prompt);
+    response.Set("dialog_type", dialog.dialog_type);
+    response.Set("message", dialog.message);
+    if (!dialog.default_prompt.empty()) {
+      response.Set("default_prompt", dialog.default_prompt);
     }
   } else {
     response.Set("present", false);
@@ -4315,8 +3010,8 @@ void AbpController::AcceptDialog(const std::string& tab_id,
     return;
   }
 
-  auto it = pending_dialogs_.find(tab_id);
-  if (it == pending_dialogs_.end()) {
+  auto it = tab_states_.find(tab_id);
+  if (it == tab_states_.end() || !it->second.pending_dialog.has_value()) {
     SendError(400, "No pending dialog", std::move(callback));
     return;
   }
@@ -4352,7 +3047,10 @@ void AbpController::AcceptDialog(const std::string& tab_id,
               return;
             }
             // Remove from pending
-            weak_this->pending_dialogs_.erase(tab_id);
+            auto state_it = weak_this->tab_states_.find(tab_id);
+            if (state_it != weak_this->tab_states_.end()) {
+              state_it->second.pending_dialog.reset();
+            }
 
             base::Value::Dict response;
             response.Set("success", true);
@@ -4370,8 +3068,8 @@ void AbpController::DismissDialog(const std::string& tab_id,
     return;
   }
 
-  auto it = pending_dialogs_.find(tab_id);
-  if (it == pending_dialogs_.end()) {
+  auto it = tab_states_.find(tab_id);
+  if (it == tab_states_.end() || !it->second.pending_dialog.has_value()) {
     SendError(400, "No pending dialog", std::move(callback));
     return;
   }
@@ -4401,7 +3099,10 @@ void AbpController::DismissDialog(const std::string& tab_id,
               return;
             }
             // Remove from pending
-            weak_this->pending_dialogs_.erase(tab_id);
+            auto state_it = weak_this->tab_states_.find(tab_id);
+            if (state_it != weak_this->tab_states_.end()) {
+              state_it->second.pending_dialog.reset();
+            }
 
             base::Value::Dict response;
             response.Set("success", true);
@@ -4420,12 +3121,15 @@ void AbpController::OnDialogOpened(const std::string& tab_id,
   dialog.message = message;
   dialog.default_prompt = default_prompt;
   dialog.opened_at_ms = base::Time::Now().InMillisecondsSinceUnixEpoch();
-  pending_dialogs_[tab_id] = std::move(dialog);
+  GetOrCreateTabState(tab_id).pending_dialog = std::move(dialog);
   LOG(INFO) << "ABP: Dialog opened in tab " << tab_id << " type=" << dialog_type;
 }
 
 void AbpController::OnDialogClosed(const std::string& tab_id) {
-  pending_dialogs_.erase(tab_id);
+  auto it = tab_states_.find(tab_id);
+  if (it != tab_states_.end()) {
+    it->second.pending_dialog.reset();
+  }
   LOG(INFO) << "ABP: Dialog closed in tab " << tab_id;
 }
 

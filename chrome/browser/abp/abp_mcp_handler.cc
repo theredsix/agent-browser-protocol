@@ -11,6 +11,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "chrome/browser/abp/abp_controller.h"
+#include "chrome/browser/abp/abp_tool_builder.h"
 
 namespace abp {
 
@@ -33,781 +34,216 @@ std::string GenerateSessionId() {
   return base::StringPrintf("%016" PRIx64 "%016" PRIx64, random1, random2);
 }
 
-// Get tool definitions for tools/list
+// Get tool definitions for tools/list using ToolBuilder
 base::Value::List GetToolDefinitions() {
   base::Value::List tools;
 
-  // browser_get_status
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_get_status");
-    tool.Set("description", "Get browser status and readiness");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    input_schema.Set("properties", base::Value::Dict());
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  // Browser status and tab management
+  tools.Append(ToolBuilder("browser_get_status")
+                   .Description("Get browser status and readiness")
+                   .Build());
 
-  // browser_list_tabs
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_list_tabs");
-    tool.Set("description", "List all open browser tabs");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    input_schema.Set("properties", base::Value::Dict());
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_list_tabs")
+                   .Description("List all open browser tabs")
+                   .Build());
 
-  // browser_new_tab
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_new_tab");
-    tool.Set("description", "Create a new browser tab");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict url_prop;
-    url_prop.Set("type", "string");
-    url_prop.Set("description", "URL to navigate to");
-    props.Set("url", std::move(url_prop));
-    base::Value::Dict active_prop;
-    active_prop.Set("type", "boolean");
-    active_prop.Set("description", "Whether to activate the new tab");
-    props.Set("active", std::move(active_prop));
-    base::Value::Dict index_prop;
-    index_prop.Set("type", "number");
-    index_prop.Set("description", "Position in tab strip");
-    props.Set("index", std::move(index_prop));
-    input_schema.Set("properties", std::move(props));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_new_tab")
+                   .Description("Create a new browser tab")
+                   .OptionalString("url", "URL to navigate to")
+                   .OptionalBoolean("active", "Whether to activate the new tab")
+                   .OptionalNumber("index", "Position in tab strip")
+                   .Build());
 
-  // browser_close_tab
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_close_tab");
-    tool.Set("description", "Close a browser tab");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "ID of tab to close");
-    props.Set("tab_id", std::move(tab_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_close_tab")
+                   .Description("Close a browser tab")
+                   .RequiredString("tab_id", "ID of tab to close")
+                   .Build());
 
-  // browser_get_tab_info
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_get_tab_info");
-    tool.Set("description", "Get detailed information about a tab");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "ID of tab");
-    props.Set("tab_id", std::move(tab_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_get_tab_info")
+                   .Description("Get detailed information about a tab")
+                   .RequiredString("tab_id", "ID of tab")
+                   .Build());
 
-  // browser_navigate
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_navigate");
-    tool.Set("description", "Navigate to a URL");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict url_prop;
-    url_prop.Set("type", "string");
-    url_prop.Set("description", "URL to navigate to");
-    props.Set("url", std::move(url_prop));
-    base::Value::Dict referrer_prop;
-    referrer_prop.Set("type", "string");
-    referrer_prop.Set("description", "Referrer URL");
-    props.Set("referrer", std::move(referrer_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    required.Append("url");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  // Navigation
+  tools.Append(ToolBuilder("browser_navigate")
+                   .Description("Navigate to a URL")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .RequiredString("url", "URL to navigate to")
+                   .OptionalString("referrer", "Referrer URL")
+                   .Build());
 
-  // browser_go_back
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_go_back");
-    tool.Set("description", "Navigate back in history");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_go_back")
+                   .Description("Navigate back in history")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .Build());
 
-  // browser_go_forward
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_go_forward");
-    tool.Set("description", "Navigate forward in history");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_go_forward")
+                   .Description("Navigate forward in history")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .Build());
 
-  // browser_reload
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_reload");
-    tool.Set("description", "Reload the current page");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict ignore_cache_prop;
-    ignore_cache_prop.Set("type", "boolean");
-    ignore_cache_prop.Set("description", "Force refresh ignoring cache");
-    props.Set("ignore_cache", std::move(ignore_cache_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_reload")
+                   .Description("Reload the current page")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .OptionalBoolean("ignore_cache", "Force refresh ignoring cache")
+                   .Build());
 
-  // browser_click
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_click");
-    tool.Set("description", "Click at coordinates on the page");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict x_prop;
-    x_prop.Set("type", "number");
-    x_prop.Set("description", "X coordinate");
-    props.Set("x", std::move(x_prop));
-    base::Value::Dict y_prop;
-    y_prop.Set("type", "number");
-    y_prop.Set("description", "Y coordinate");
-    props.Set("y", std::move(y_prop));
-    base::Value::Dict button_prop;
-    button_prop.Set("type", "string");
-    button_prop.Set("description", "Mouse button: left, right, middle");
-    base::Value::List button_enum;
-    button_enum.Append("left");
-    button_enum.Append("right");
-    button_enum.Append("middle");
-    button_prop.Set("enum", std::move(button_enum));
-    props.Set("button", std::move(button_prop));
-    base::Value::Dict click_count_prop;
-    click_count_prop.Set("type", "number");
-    click_count_prop.Set("description", "1=single, 2=double, 3=triple click");
-    props.Set("click_count", std::move(click_count_prop));
-    base::Value::Dict modifiers_prop;
-    modifiers_prop.Set("type", "array");
-    base::Value::Dict modifier_items;
-    modifier_items.Set("type", "string");
-    base::Value::List modifier_enum;
-    modifier_enum.Append("Shift");
-    modifier_enum.Append("Control");
-    modifier_enum.Append("Alt");
-    modifier_enum.Append("Meta");
-    modifier_items.Set("enum", std::move(modifier_enum));
-    modifiers_prop.Set("items", std::move(modifier_items));
-    modifiers_prop.Set("description", "Modifier keys to hold during click");
-    props.Set("modifiers", std::move(modifiers_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    required.Append("x");
-    required.Append("y");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  // Input actions
+  tools.Append(ToolBuilder("browser_click")
+                   .Description("Click at coordinates on the page")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .RequiredNumber("x", "X coordinate")
+                   .RequiredNumber("y", "Y coordinate")
+                   .OptionalStringEnum("button", "Mouse button",
+                                       {"left", "right", "middle"})
+                   .OptionalNumber("click_count", "1=single, 2=double, 3=triple click")
+                   .OptionalStringArrayEnum("modifiers", "Modifier keys to hold",
+                                            {"Shift", "Control", "Alt", "Meta"})
+                   .Build());
 
-  // browser_type
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_type");
-    tool.Set("description", "Type text at current focus position");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict text_prop;
-    text_prop.Set("type", "string");
-    text_prop.Set("description", "Text to type");
-    props.Set("text", std::move(text_prop));
-    base::Value::Dict delay_prop;
-    delay_prop.Set("type", "number");
-    delay_prop.Set("description", "Delay between keystrokes in milliseconds");
-    props.Set("delay_ms", std::move(delay_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    required.Append("text");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_type")
+                   .Description("Type text at current focus position")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .RequiredString("text", "Text to type")
+                   .OptionalNumber("delay_ms", "Delay between keystrokes in ms")
+                   .Build());
 
-  // browser_screenshot
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_screenshot");
-    tool.Set("description", "Take a screenshot of the page");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict markup_prop;
-    markup_prop.Set("type", "string");
-    markup_prop.Set("description",
-                    "Element markup overlay: none, interactive, clickable, "
-                    "typeable, inputs");
-    props.Set("markup", std::move(markup_prop));
-    base::Value::Dict format_prop;
-    format_prop.Set("type", "string");
-    format_prop.Set("description", "Image format: png, webp, jpeg");
-    props.Set("format", std::move(format_prop));
-    base::Value::Dict area_prop;
-    area_prop.Set("type", "string");
-    area_prop.Set("description", "Capture area: none, viewport");
-    props.Set("area", std::move(area_prop));
-    base::Value::Dict cursor_prop;
-    cursor_prop.Set("type", "boolean");
-    cursor_prop.Set("description", "Include virtual cursor in screenshot");
-    props.Set("cursor", std::move(cursor_prop));
-    base::Value::Dict full_page_prop;
-    full_page_prop.Set("type", "boolean");
-    full_page_prop.Set("description", "Capture full scrollable page");
-    props.Set("full_page", std::move(full_page_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(
+      ToolBuilder("browser_screenshot")
+          .Description("Take a screenshot of the page")
+          .RequiredString("tab_id", "Target tab ID")
+          .OptionalString("markup",
+                          "Element markup overlay: none, interactive, "
+                          "clickable, typeable, inputs")
+          .OptionalString("format", "Image format: png, webp, jpeg")
+          .OptionalString("area", "Capture area: none, viewport")
+          .OptionalBoolean("cursor", "Include virtual cursor in screenshot")
+          .OptionalBoolean("full_page", "Capture full scrollable page")
+          .Build());
 
-  // browser_execute_javascript
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_execute_javascript");
-    tool.Set("description", "Execute JavaScript in the page context");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict expr_prop;
-    expr_prop.Set("type", "string");
-    expr_prop.Set("description", "JavaScript expression to evaluate");
-    props.Set("expression", std::move(expr_prop));
-    base::Value::Dict await_prop;
-    await_prop.Set("type", "boolean");
-    await_prop.Set("description", "Wait for promise resolution");
-    props.Set("await_promise", std::move(await_prop));
-    base::Value::Dict timeout_prop;
-    timeout_prop.Set("type", "number");
-    timeout_prop.Set("description", "Timeout for promise resolution in ms");
-    props.Set("timeout_ms", std::move(timeout_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    required.Append("expression");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(
+      ToolBuilder("browser_execute_javascript")
+          .Description("Execute JavaScript in the page context")
+          .RequiredString("tab_id", "Target tab ID")
+          .RequiredString("expression", "JavaScript expression to evaluate")
+          .OptionalBoolean("await_promise", "Wait for promise resolution")
+          .OptionalNumber("timeout_ms", "Timeout for promise resolution in ms")
+          .Build());
 
-  // browser_keyboard_press
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_keyboard_press");
-    tool.Set("description",
-             "Press a key or key combination (e.g., Enter, Escape, Ctrl+C)");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict key_prop;
-    key_prop.Set("type", "string");
-    key_prop.Set("description",
-                 "Key to press (e.g., Enter, Escape, a, F1, Tab)");
-    props.Set("key", std::move(key_prop));
-    base::Value::Dict modifiers_prop;
-    modifiers_prop.Set("type", "array");
-    base::Value::Dict modifier_items;
-    modifier_items.Set("type", "string");
-    base::Value::List modifier_enum;
-    modifier_enum.Append("Shift");
-    modifier_enum.Append("Control");
-    modifier_enum.Append("Alt");
-    modifier_enum.Append("Meta");
-    modifier_items.Set("enum", std::move(modifier_enum));
-    modifiers_prop.Set("items", std::move(modifier_items));
-    modifiers_prop.Set("description", "Modifier keys to hold during press");
-    props.Set("modifiers", std::move(modifiers_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    required.Append("key");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(
+      ToolBuilder("browser_keyboard_press")
+          .Description(
+              "Press a key or key combination (e.g., Enter, Escape, Ctrl+C)")
+          .RequiredString("tab_id", "Target tab ID")
+          .RequiredString("key", "Key to press (e.g., Enter, Escape, a, F1, Tab)")
+          .OptionalStringArrayEnum("modifiers", "Modifier keys to hold",
+                                   {"Shift", "Control", "Alt", "Meta"})
+          .Build());
 
-  // browser_scroll
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_scroll");
-    tool.Set("description", "Scroll the page using mouse wheel");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict x_prop;
-    x_prop.Set("type", "number");
-    x_prop.Set("description", "X coordinate for scroll position");
-    props.Set("x", std::move(x_prop));
-    base::Value::Dict y_prop;
-    y_prop.Set("type", "number");
-    y_prop.Set("description", "Y coordinate for scroll position");
-    props.Set("y", std::move(y_prop));
-    base::Value::Dict delta_x_prop;
-    delta_x_prop.Set("type", "number");
-    delta_x_prop.Set("description", "Horizontal scroll amount (negative = left)");
-    props.Set("delta_x", std::move(delta_x_prop));
-    base::Value::Dict delta_y_prop;
-    delta_y_prop.Set("type", "number");
-    delta_y_prop.Set("description", "Vertical scroll amount (negative = down)");
-    props.Set("delta_y", std::move(delta_y_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    required.Append("delta_y");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_scroll")
+                   .Description("Scroll the page using mouse wheel")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .RequiredNumber("delta_y", "Vertical scroll amount")
+                   .OptionalNumber("x", "X coordinate for scroll position")
+                   .OptionalNumber("y", "Y coordinate for scroll position")
+                   .OptionalNumber("delta_x", "Horizontal scroll amount")
+                   .Build());
 
-  // browser_mouse_move
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_mouse_move");
-    tool.Set("description", "Move mouse to coordinates (for hover effects)");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict x_prop;
-    x_prop.Set("type", "number");
-    x_prop.Set("description", "X coordinate");
-    props.Set("x", std::move(x_prop));
-    base::Value::Dict y_prop;
-    y_prop.Set("type", "number");
-    y_prop.Set("description", "Y coordinate");
-    props.Set("y", std::move(y_prop));
-    base::Value::Dict steps_prop;
-    steps_prop.Set("type", "number");
-    steps_prop.Set("description", "Intermediate steps for smooth movement");
-    props.Set("steps", std::move(steps_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    required.Append("x");
-    required.Append("y");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_mouse_move")
+                   .Description("Move mouse to coordinates (for hover effects)")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .RequiredNumber("x", "X coordinate")
+                   .RequiredNumber("y", "Y coordinate")
+                   .OptionalNumber("steps", "Intermediate steps for smooth movement")
+                   .Build());
 
-  // browser_activate_tab
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_activate_tab");
-    tool.Set("description", "Switch to a specific tab");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "ID of tab to activate");
-    props.Set("tab_id", std::move(tab_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  // Tab control
+  tools.Append(ToolBuilder("browser_activate_tab")
+                   .Description("Switch to a specific tab")
+                   .RequiredString("tab_id", "ID of tab to activate")
+                   .Build());
 
-  // browser_stop_loading
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_stop_loading");
-    tool.Set("description", "Stop page loading");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_stop_loading")
+                   .Description("Stop page loading")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .Build());
 
-  // browser_get_dialog
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_get_dialog");
-    tool.Set("description",
-             "Check if a dialog (alert/confirm/prompt) is pending");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  // Dialog handling
+  tools.Append(
+      ToolBuilder("browser_get_dialog")
+          .Description("Check if a dialog (alert/confirm/prompt) is pending")
+          .RequiredString("tab_id", "Target tab ID")
+          .Build());
 
-  // browser_accept_dialog
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_accept_dialog");
-    tool.Set("description", "Accept (click OK on) a pending dialog");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict prompt_text_prop;
-    prompt_text_prop.Set("type", "string");
-    prompt_text_prop.Set("description", "Text to enter for prompt dialogs");
-    props.Set("prompt_text", std::move(prompt_text_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_accept_dialog")
+                   .Description("Accept (click OK on) a pending dialog")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .OptionalString("prompt_text", "Text to enter for prompt dialogs")
+                   .Build());
 
-  // browser_dismiss_dialog
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_dismiss_dialog");
-    tool.Set("description", "Dismiss (click Cancel on) a pending dialog");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_dismiss_dialog")
+                   .Description("Dismiss (click Cancel on) a pending dialog")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .Build());
 
-  // browser_list_downloads
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_list_downloads");
-    tool.Set("description", "List all downloads");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict state_prop;
-    state_prop.Set("type", "string");
-    base::Value::List state_enum;
-    state_enum.Append("in_progress");
-    state_enum.Append("completed");
-    state_enum.Append("cancelled");
-    state_enum.Append("failed");
-    state_prop.Set("enum", std::move(state_enum));
-    state_prop.Set("description", "Filter by download state");
-    props.Set("state", std::move(state_prop));
-    base::Value::Dict limit_prop;
-    limit_prop.Set("type", "number");
-    limit_prop.Set("description", "Maximum number of downloads to return");
-    props.Set("limit", std::move(limit_prop));
-    input_schema.Set("properties", std::move(props));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  // Downloads
+  tools.Append(
+      ToolBuilder("browser_list_downloads")
+          .Description("List all downloads")
+          .OptionalStringEnum("state", "Filter by download state",
+                              {"in_progress", "completed", "cancelled", "failed"})
+          .OptionalNumber("limit", "Maximum number of downloads to return")
+          .Build());
 
-  // browser_get_download
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_get_download");
-    tool.Set("description", "Get download status");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict download_id_prop;
-    download_id_prop.Set("type", "string");
-    download_id_prop.Set("description", "Download ID");
-    props.Set("download_id", std::move(download_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("download_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_get_download")
+                   .Description("Get download status")
+                   .RequiredString("download_id", "Download ID")
+                   .Build());
 
-  // browser_cancel_download
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_cancel_download");
-    tool.Set("description", "Cancel an in-progress download");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict download_id_prop;
-    download_id_prop.Set("type", "string");
-    download_id_prop.Set("description", "Download ID");
-    props.Set("download_id", std::move(download_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("download_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_cancel_download")
+                   .Description("Cancel an in-progress download")
+                   .RequiredString("download_id", "Download ID")
+                   .Build());
 
-  // browser_provide_files
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_provide_files");
-    tool.Set("description", "Provide files to a pending file chooser dialog");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict chooser_id_prop;
-    chooser_id_prop.Set("type", "string");
-    chooser_id_prop.Set("description", "File chooser ID from event");
-    props.Set("chooser_id", std::move(chooser_id_prop));
-    base::Value::Dict files_prop;
-    files_prop.Set("type", "array");
-    base::Value::Dict file_items;
-    file_items.Set("type", "string");
-    files_prop.Set("items", std::move(file_items));
-    files_prop.Set("description", "File paths to provide");
-    props.Set("files", std::move(files_prop));
-    base::Value::Dict path_prop;
-    path_prop.Set("type", "string");
-    path_prop.Set("description", "Save path for save dialogs");
-    props.Set("path", std::move(path_prop));
-    base::Value::Dict cancel_prop;
-    cancel_prop.Set("type", "boolean");
-    cancel_prop.Set("description", "Cancel the file chooser");
-    props.Set("cancel", std::move(cancel_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("chooser_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  // File chooser
+  tools.Append(ToolBuilder("browser_provide_files")
+                   .Description("Provide files to a pending file chooser dialog")
+                   .RequiredString("chooser_id", "File chooser ID from event")
+                   .OptionalStringArray("files", "File paths to provide")
+                   .OptionalString("path", "Save path for save dialogs")
+                   .OptionalBoolean("cancel", "Cancel the file chooser")
+                   .Build());
 
-  // browser_keyboard_down
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_keyboard_down");
-    tool.Set("description", "Press and hold a key");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict key_prop;
-    key_prop.Set("type", "string");
-    key_prop.Set("description", "Key to press down");
-    props.Set("key", std::move(key_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    required.Append("key");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  // Keyboard hold/release
+  tools.Append(ToolBuilder("browser_keyboard_down")
+                   .Description("Press and hold a key")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .RequiredString("key", "Key to press down")
+                   .Build());
 
-  // browser_keyboard_up
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_keyboard_up");
-    tool.Set("description", "Release a held key");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict key_prop;
-    key_prop.Set("type", "string");
-    key_prop.Set("description", "Key to release");
-    props.Set("key", std::move(key_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    required.Append("key");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_keyboard_up")
+                   .Description("Release a held key")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .RequiredString("key", "Key to release")
+                   .Build());
 
-  // browser_get_execution_state
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_get_execution_state");
-    tool.Set("description", "Get JavaScript execution state for a tab");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  // Execution control
+  tools.Append(ToolBuilder("browser_get_execution_state")
+                   .Description("Get JavaScript execution state for a tab")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .Build());
 
-  // browser_set_execution_state
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_set_execution_state");
-    tool.Set("description", "Pause or resume JavaScript execution");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict tab_id_prop;
-    tab_id_prop.Set("type", "string");
-    tab_id_prop.Set("description", "Target tab ID");
-    props.Set("tab_id", std::move(tab_id_prop));
-    base::Value::Dict paused_prop;
-    paused_prop.Set("type", "boolean");
-    paused_prop.Set("description", "True to pause, false to resume");
-    props.Set("paused", std::move(paused_prop));
-    input_schema.Set("properties", std::move(props));
-    base::Value::List required;
-    required.Append("tab_id");
-    required.Append("paused");
-    input_schema.Set("required", std::move(required));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  tools.Append(ToolBuilder("browser_set_execution_state")
+                   .Description("Pause or resume JavaScript execution")
+                   .RequiredString("tab_id", "Target tab ID")
+                   .RequiredBoolean("paused", "True to pause, false to resume")
+                   .Build());
 
-  // browser_shutdown
-  {
-    base::Value::Dict tool;
-    tool.Set("name", "browser_shutdown");
-    tool.Set("description", "Gracefully shut down the browser");
-    base::Value::Dict input_schema;
-    input_schema.Set("type", "object");
-    base::Value::Dict props;
-    base::Value::Dict timeout_prop;
-    timeout_prop.Set("type", "number");
-    timeout_prop.Set("description", "Timeout before force quit in ms");
-    props.Set("timeout_ms", std::move(timeout_prop));
-    input_schema.Set("properties", std::move(props));
-    tool.Set("inputSchema", std::move(input_schema));
-    tools.Append(std::move(tool));
-  }
+  // Browser control
+  tools.Append(ToolBuilder("browser_shutdown")
+                   .Description("Gracefully shut down the browser")
+                   .OptionalNumber("timeout_ms", "Timeout before force quit in ms")
+                   .Build());
 
   return tools;
 }

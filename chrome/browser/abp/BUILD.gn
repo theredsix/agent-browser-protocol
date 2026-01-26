@@ -9,6 +9,8 @@ source_set("abp") {
     "abp_config.h",
     "abp_controller.cc",
     "abp_controller.h",
+    "abp_input_dispatcher.cc",
+    "abp_input_dispatcher.h",
     "abp_types.h",
     "abp_download_observer.cc",
     "abp_download_observer.h",
@@ -26,6 +28,8 @@ source_set("abp") {
     "abp_mcp_handler.h",
     "abp_switches.cc",
     "abp_switches.h",
+    "abp_tool_builder.cc",
+    "abp_tool_builder.h",
   ]
 
   deps = [
