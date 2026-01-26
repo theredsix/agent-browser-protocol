@@ -30,6 +30,7 @@ class AbpActionContext;
 class AbpDownloadObserver;
 class AbpEventCollector;
 class AbpHistoryController;
+class AbpInputDispatcher;
 
 // Key information for CDP Input.dispatchKeyEvent
 struct KeyInfo {
@@ -59,22 +60,6 @@ KeyInfo GetKeyInfo(const std::string& key_name);
 // Convert modifier names to CDP modifier bitmask
 // Modifier names: "Alt", "Control", "Meta", "Shift"
 int ModifiersToFlags(const std::vector<std::string>& modifiers);
-
-// Context for recording actions with history
-struct ActionContext {
-  ActionContext();
-  ~ActionContext();
-  ActionContext(const ActionContext&) = delete;
-  ActionContext& operator=(const ActionContext&) = delete;
-  ActionContext(ActionContext&&);
-  ActionContext& operator=(ActionContext&&);
-
-  std::string tab_id;
-  std::string action_type;
-  base::Value::Dict params;
-  int64_t start_time = 0;
-  std::string screenshot_before_path;
-};
 
 // CDP client for sending commands and receiving responses/events
 class AbpCdpClient : public content::DevToolsAgentHostClient {
@@ -120,6 +105,10 @@ class AbpController {
   // AbpActionContext needs access to execution control, history, and
   // screenshot methods to implement the unified action flow.
   friend class AbpActionContext;
+
+  // AbpInputDispatcher needs access to GetOrCreateTabState for held key
+  // tracking across KeyDown/KeyUp operations.
+  friend class AbpInputDispatcher;
 
  public:
   AbpController();
@@ -232,43 +221,9 @@ class AbpController {
   void Navigate(const std::string& tab_id,
                 const base::Value::Dict& params,
                 ResponseCallback callback);
-  void OnNavigateBeforeScreenshot(const std::string& tab_id,
-                                  const std::string& url,
-                                  std::unique_ptr<ActionContext> context,
-                                  ResponseCallback callback,
-                                  std::string screenshot_before_path);
-  void DispatchNavigateEvent(const std::string& tab_id,
-                             const std::string& url,
-                             std::unique_ptr<ActionContext> context,
-                             ResponseCallback callback);
-  void OnNavigateAfterScreenshot(const std::string& url,
-                                 std::unique_ptr<ActionContext> context,
-                                 ResponseCallback callback,
-                                 std::string screenshot_after_path);
   void Reload(const std::string& tab_id, ResponseCallback callback);
-  void OnReloadBeforeScreenshot(const std::string& tab_id,
-                                std::unique_ptr<ActionContext> context,
-                                ResponseCallback callback,
-                                std::string screenshot_before_path);
-  void OnReloadAfterScreenshot(std::unique_ptr<ActionContext> context,
-                               ResponseCallback callback,
-                               std::string screenshot_after_path);
   void GoBack(const std::string& tab_id, ResponseCallback callback);
-  void OnGoBackBeforeScreenshot(const std::string& tab_id,
-                                std::unique_ptr<ActionContext> context,
-                                ResponseCallback callback,
-                                std::string screenshot_before_path);
-  void OnGoBackAfterScreenshot(std::unique_ptr<ActionContext> context,
-                               ResponseCallback callback,
-                               std::string screenshot_after_path);
   void GoForward(const std::string& tab_id, ResponseCallback callback);
-  void OnGoForwardBeforeScreenshot(const std::string& tab_id,
-                                   std::unique_ptr<ActionContext> context,
-                                   ResponseCallback callback,
-                                   std::string screenshot_before_path);
-  void OnGoForwardAfterScreenshot(std::unique_ptr<ActionContext> context,
-                                  ResponseCallback callback,
-                                  std::string screenshot_after_path);
 
   // Content
   void Screenshot(const std::string& tab_id,
@@ -358,76 +313,6 @@ class AbpController {
   void OnExecuteScriptResult(ResponseCallback callback,
                              bool success,
                              const std::string& result);
-  void OnClickBeforeScreenshot(const std::string& tab_id,
-                               double x,
-                               double y,
-                               std::unique_ptr<ActionContext> context,
-                               ResponseCallback callback,
-                               std::string screenshot_before_path);
-  void DispatchClickEvent(const std::string& tab_id,
-                          double x,
-                          double y,
-                          std::unique_ptr<ActionContext> context,
-                          ResponseCallback callback);
-  void OnClickPressedResult(const std::string& tab_id,
-                            double x,
-                            double y,
-                            std::unique_ptr<ActionContext> context,
-                            ResponseCallback callback,
-                            bool success,
-                            const std::string& result);
-  void OnClickResult(std::unique_ptr<ActionContext> context,
-                     ResponseCallback callback,
-                     bool success,
-                     const std::string& result);
-  void OnClickAfterScreenshot(std::unique_ptr<ActionContext> context,
-                              ResponseCallback callback,
-                              std::string screenshot_after_path);
-  void OnTypeBeforeScreenshot(const std::string& tab_id,
-                              const std::string& text,
-                              std::unique_ptr<ActionContext> context,
-                              ResponseCallback callback,
-                              std::string screenshot_before_path);
-  void DispatchTypeEvent(const std::string& tab_id,
-                         const std::string& text,
-                         std::unique_ptr<ActionContext> context,
-                         ResponseCallback callback);
-  void OnTypeResult(std::unique_ptr<ActionContext> context,
-                    ResponseCallback callback,
-                    bool success,
-                    const std::string& result);
-  void OnTypeAfterScreenshot(std::unique_ptr<ActionContext> context,
-                             ResponseCallback callback,
-                             std::string screenshot_after_path);
-
-  // Centralized after-action handler: wait for action_complete, take screenshot,
-  // record to history, and send response. This is the single entry point for
-  // completing any action that modifies page state.
-  //
-  // Parameters:
-  //   tab_id: The tab where the action was performed
-  //   context: Action context with start_time, params, screenshot_before_path
-  //   result: The result dict to include in the response
-  //   callback: Response callback to send the final response
-  void CompleteActionWithScreenshot(
-      const std::string& tab_id,
-      std::unique_ptr<ActionContext> context,
-      base::Value::Dict result,
-      ResponseCallback callback);
-
-  // Internal callback after wait completes
-  void OnWaitCompleteForAction(
-      const std::string& tab_id,
-      std::unique_ptr<ActionContext> context,
-      base::Value::Dict result,
-      ResponseCallback callback);
-
-  // Internal callback after screenshot captured
-  void OnActionScreenshotCaptured(
-      std::unique_ptr<ActionContext> context,
-      base::Value::Dict result,
-      ResponseCallback callback,
-      std::string screenshot_after_path);
 
   // Direct screenshot capture using CopyFromSurface (no CDP/JS injection)
   // Note: Cursor is rendered by virtual cursor overlay and captured automatically
@@ -456,19 +341,134 @@ class AbpController {
       bool success,
       const std::string& result);
 
-  // Record completed action to history
-  void RecordCompletedAction(const ActionContext& context,
-                             const base::Value* result,
-                             bool success,
-                             const std::string& error_code,
-                             const std::string& error_message,
-                             const std::string& screenshot_after_path);
+  // ==========================================================================
+  // Per-tab state types
+  // ==========================================================================
 
-  // CDP clients per WebContents (keyed by DevToolsAgentHost ID)
-  std::map<std::string, std::unique_ptr<AbpCdpClient>> cdp_clients_;
+  // Virtual cursor state - tracks cursor position for screenshots
+  struct VirtualCursorState {
+    bool active = false;
+    double x = 0;
+    double y = 0;
+    ui::mojom::CursorType cursor_type = ui::mojom::CursorType::kPointer;
+  };
+
+  // Execution state for V8 virtual clock + debugger pause
+  struct ExecutionState {
+    bool debugger_enabled = false;
+    bool virtual_time_enabled = false;
+    bool paused = false;  // true = JS halted + time frozen
+    double virtual_time_base_ticks_ms = 0;
+  };
+
+  // Held keyboard keys state (for keyboard/down and keyboard/up)
+  struct HeldKeyState {
+    HeldKeyState();
+    ~HeldKeyState();
+    HeldKeyState(const HeldKeyState&);
+    HeldKeyState& operator=(const HeldKeyState&);
+
+    std::set<std::string> held_keys;  // Set of currently held key names
+    int current_modifiers = 0;        // Bitmask of active modifiers (1=Alt, 2=Ctrl, 4=Meta, 8=Shift)
+  };
+
+  // Pending JavaScript dialog state
+  struct PendingDialog {
+    PendingDialog();
+    ~PendingDialog();
+    PendingDialog(const PendingDialog&);
+    PendingDialog& operator=(const PendingDialog&);
+
+    std::string dialog_type;   // "alert", "confirm", "prompt", "beforeunload"
+    std::string message;
+    std::string default_prompt;
+    int64_t opened_at_ms = 0;
+  };
+
+  // Action complete wait state for after-screenshots
+  // Waits for: networkidle2 AND 500ms elapsed AND load AND DOMContentLoaded
+  struct ActionCompleteWaiter {
+    ActionCompleteWaiter();
+    ~ActionCompleteWaiter();
+    ActionCompleteWaiter(const ActionCompleteWaiter&) = delete;
+    ActionCompleteWaiter& operator=(const ActionCompleteWaiter&) = delete;
+
+    std::string tab_id;
+    base::TimeTicks action_start_time;
+    base::OnceClosure on_complete;
+
+    // Condition flags
+    bool load_fired = false;
+    bool dom_content_loaded_fired = false;
+    bool network_idle = false;
+    bool min_time_elapsed = false;
+
+    // Network tracking (networkidle2 = ≤2 connections for 500ms)
+    int active_requests = 0;
+    base::TimeTicks last_network_activity;
+
+    // Timeout
+    base::TimeTicks timeout_time;
+
+    bool IsComplete() const {
+      return load_fired && dom_content_loaded_fired &&
+             network_idle && min_time_elapsed;
+    }
+  };
+
+  // ==========================================================================
+  // Consolidated per-tab state container
+  // ==========================================================================
+
+  // TabState holds all state associated with a single browser tab.
+  // This consolidates what was previously 6 separate maps keyed by tab ID.
+  struct TabState {
+    TabState();
+    ~TabState();
+    TabState(TabState&&);
+    TabState& operator=(TabState&&);
+    TabState(const TabState&) = delete;
+    TabState& operator=(const TabState&) = delete;
+
+    // CDP client for DevTools protocol commands
+    std::unique_ptr<AbpCdpClient> cdp_client;
+
+    // Virtual cursor position and state
+    VirtualCursorState cursor;
+
+    // Execution control state (debugger, virtual time)
+    ExecutionState execution;
+
+    // Currently held keyboard keys
+    HeldKeyState held_keys;
+
+    // Pending JavaScript dialog (if any)
+    std::optional<PendingDialog> pending_dialog;
+
+    // Action completion waiter (for screenshot timing)
+    std::unique_ptr<ActionCompleteWaiter> action_waiter;
+
+    // Check if tab has any active state
+    bool IsIdle() const;
+
+    // Reset all state (for cleanup)
+    void Reset();
+  };
+
+  // All per-tab state, keyed by DevToolsAgentHost ID
+  std::map<std::string, TabState> tab_states_;
+
+  // Get or create TabState for a tab
+  TabState& GetOrCreateTabState(const std::string& tab_id);
+
+  // Clean up state for a closed tab
+  void CleanupTabState(const std::string& tab_id);
+
+  // ==========================================================================
+  // Virtual cursor methods
+  // ==========================================================================
 
   // Sets the virtual cursor position via Mojo IPC to the renderer.
-  // This is the primary path for cursor rendering in the compositor layer.
   void SetVirtualCursorViaMojo(content::WebContents* wc,
                                 float x,
                                 float y,
@@ -480,38 +480,6 @@ class AbpController {
 
   // Enables/disables the virtual cursor system for a tab.
   void SetVirtualCursorEnabledViaMojo(content::WebContents* wc, bool enabled);
-
-  // Virtual cursor state per tab (keyed by DevToolsAgentHost ID)
-  // When a virtual cursor is active via CDP overlay, we track it here
-  // so screenshots don't double-draw the cursor
-  struct VirtualCursorState {
-    bool active = false;
-    double x = 0;
-    double y = 0;
-    ui::mojom::CursorType cursor_type = ui::mojom::CursorType::kPointer;
-  };
-  std::map<std::string, VirtualCursorState> virtual_cursor_states_;
-
-  // Execution state for V8 virtual clock + debugger pause
-  struct ExecutionState {
-    bool debugger_enabled = false;
-    bool virtual_time_enabled = false;
-    bool paused = false;  // true = JS halted + time frozen
-    double virtual_time_base_ticks_ms = 0;
-  };
-  std::map<std::string, ExecutionState> execution_states_;
-
-  // Held keyboard keys state per tab (for keyboard/down and keyboard/up)
-  struct HeldKeyState {
-    HeldKeyState();
-    ~HeldKeyState();
-    HeldKeyState(const HeldKeyState&);
-    HeldKeyState& operator=(const HeldKeyState&);
-
-    std::set<std::string> held_keys;  // Set of currently held key names
-    int current_modifiers = 0;        // Bitmask of active modifiers (1=Alt, 2=Ctrl, 4=Meta, 8=Shift)
-  };
-  std::map<std::string, HeldKeyState> held_keys_state_;
 
   // Enable execution control (Debugger + virtual time) for a tab
   void EnableExecutionControl(
@@ -551,38 +519,6 @@ class AbpController {
                         base::OnceClosure then,
                         bool success,
                         const std::string& result);
-
-  // Action complete wait state for after-screenshots
-  // Waits for: networkidle2 AND 500ms elapsed AND load AND DOMContentLoaded
-  struct ActionCompleteWaiter {
-    ActionCompleteWaiter();
-    ~ActionCompleteWaiter();
-    ActionCompleteWaiter(const ActionCompleteWaiter&) = delete;
-    ActionCompleteWaiter& operator=(const ActionCompleteWaiter&) = delete;
-
-    std::string tab_id;
-    base::TimeTicks action_start_time;
-    base::OnceClosure on_complete;
-
-    // Condition flags
-    bool load_fired = false;
-    bool dom_content_loaded_fired = false;
-    bool network_idle = false;
-    bool min_time_elapsed = false;
-
-    // Network tracking (networkidle2 = ≤2 connections for 500ms)
-    int active_requests = 0;
-    base::TimeTicks last_network_activity;
-
-    // Timeout
-    base::TimeTicks timeout_time;
-
-    bool IsComplete() const {
-      return load_fired && dom_content_loaded_fired &&
-             network_idle && min_time_elapsed;
-    }
-  };
-  std::map<std::string, std::unique_ptr<ActionCompleteWaiter>> action_waiters_;
 
   // Check if wait conditions are met and fire callback if so
   void CheckActionCompleteConditions(const std::string& tab_id);
@@ -624,22 +560,11 @@ class AbpController {
   // Event collector for capturing events during actions (owned)
   std::unique_ptr<AbpEventCollector> event_collector_;
 
+  // Input dispatcher for all input-related actions (owned)
+  std::unique_ptr<AbpInputDispatcher> input_dispatcher_;
+
   // Pending file choosers (keyed by chooser ID)
   std::map<std::string, base::Value::Dict> pending_file_choosers_;
-
-  // Pending JavaScript dialogs (keyed by tab_id - only one dialog per tab)
-  struct PendingDialog {
-    PendingDialog();
-    ~PendingDialog();
-    PendingDialog(const PendingDialog&);
-    PendingDialog& operator=(const PendingDialog&);
-
-    std::string dialog_type;   // "alert", "confirm", "prompt", "beforeunload"
-    std::string message;
-    std::string default_prompt;
-    int64_t opened_at_ms = 0;
-  };
-  std::map<std::string, PendingDialog> pending_dialogs_;
 
   base::WeakPtrFactory<AbpController> weak_factory_{this};
 };

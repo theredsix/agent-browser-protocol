@@ -361,12 +361,12 @@ void AbpActionContext::SendResponse() {
 
   // 6. Add virtual time info if execution control is enabled
   if (controller_->IsExecutionControlEnabled()) {
-    auto& states = controller_->execution_states_;
-    auto it = states.find(tab_id_);
-    if (it != states.end()) {
+    auto it = controller_->tab_states_.find(tab_id_);
+    if (it != controller_->tab_states_.end()) {
+      const auto& exec = it->second.execution;
       base::Value::Dict virtual_time;
-      virtual_time.Set("paused", it->second.paused);
-      virtual_time.Set("base_ticks_ms", it->second.virtual_time_base_ticks_ms);
+      virtual_time.Set("paused", exec.paused);
+      virtual_time.Set("base_ticks_ms", exec.virtual_time_base_ticks_ms);
       envelope.Set("virtual_time", std::move(virtual_time));
     }
   }

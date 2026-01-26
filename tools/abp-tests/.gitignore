@@ -1,0 +1,4 @@
+*.sqlite
+*.log
+db*
+screenshots
