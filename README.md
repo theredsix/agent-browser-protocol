@@ -1,5 +1,8 @@
 # Agent Browser Protocol
 
+<img width="384" height="256" alt="ChatGPT Image Jan 25, 2026, 03_59_19 PM" src="https://github.com/user-attachments/assets/6cf0b584-b708-4c75-a146-dd49750e92f0" /> 
+
+
 **Browsers are async. Agents are synchronous. ABP turns continuous browsing into discrete, atomic steps—so LLMs can reason about the web without racing against it.**
 
 A Chromium fork with a REST + MCP API built directly into the browser engine. One request = one completed step (settled state + screenshot + event log).
