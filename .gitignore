@@ -248,6 +248,7 @@ vs-chromium-project.txt
 /net/testserver.log
 /orderfiles
 /out*/
+/dist/
 /remoting/android/internal/
 /remoting/appengine/
 /remoting/host/installer/chrome-remote-desktop_*.buildinfo
