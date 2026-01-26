@@ -457,6 +457,41 @@ ABP is under active development. Current implementation:
 
 ---
 
+## Testing
+
+ABP includes a comprehensive integration test suite validating core functionality.
+
+### Run Tests
+
+```bash
+# Start Chrome with ABP
+./out/Default/chrome --enable-abp
+
+# Start test page server (separate terminal)
+cd chrome/browser/abp/test_pages && python3 -m http.server 8081
+
+# Run integration tests (10 test cases)
+./run_tests.sh
+
+# Run MCP server tests (8 test cases)
+./tools/abp-mcp-test.sh
+```
+
+### Test Coverage
+
+| Category | Tests |
+|----------|-------|
+| Navigation | URL navigation, back/forward |
+| Input | Click, type, keyboard press |
+| Screenshots | Capture with element markup |
+| JavaScript | Execution and result retrieval |
+| Execution Control | Virtual time freeze (3 tests) |
+| MCP Server | Protocol compliance (8 tests) |
+
+See [TESTING.md](TESTING.md) for the complete test matrix, test page documentation, and guide for adding new tests.
+
+---
+
 ## Contributing
 
 ABP is a substantial fork of Chromium. Contributions welcome, but please:

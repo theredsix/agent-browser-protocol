@@ -9,6 +9,7 @@ source_set("abp") {
     "abp_config.h",
     "abp_controller.cc",
     "abp_controller.h",
+    "abp_types.h",
     "abp_download_observer.cc",
     "abp_download_observer.h",
     "abp_event_collector.cc",

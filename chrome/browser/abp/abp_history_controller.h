@@ -6,20 +6,13 @@
 #include <string>
 
 #include "base/files/file_path.h"
-#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/abp/abp_config.h"
 #include "chrome/browser/abp/abp_history_database.h"
+#include "chrome/browser/abp/abp_types.h"
 
 namespace abp {
-
-// Response callback type (same as AbpController)
-// content_type: "application/json" for JSON, "image/webp" for binary
-using HistoryResponseCallback =
-    base::OnceCallback<void(int status,
-                            const std::string& content_type,
-                            std::string body)>;
 
 // Controller for ABP history system.
 // Manages session lifecycle, records actions/events, and handles REST requests.
@@ -68,7 +61,7 @@ class AbpHistoryController {
   void HandleRequest(const std::string& method,
                      const std::string& path,
                      const std::string& body,
-                     HistoryResponseCallback callback);
+                     ResponseCallback callback);
 
   // Get screenshot file for use by action recording
   // Returns path like /screenshots/{timestamp}_{tab_id}_{before|after}.webp
@@ -87,76 +80,76 @@ class AbpHistoryController {
  private:
   // REST endpoint handlers
   void HandleGetSessions(const std::string& query,
-                         HistoryResponseCallback callback);
-  void HandleGetCurrentSession(HistoryResponseCallback callback);
+                         ResponseCallback callback);
+  void HandleGetCurrentSession(ResponseCallback callback);
   void HandleGetSession(const std::string& session_id,
-                        HistoryResponseCallback callback);
+                        ResponseCallback callback);
   void HandleExportSession(const std::string& session_id,
                            const std::string& query,
-                           HistoryResponseCallback callback);
+                           ResponseCallback callback);
 
   void HandleGetActions(const std::string& query,
-                        HistoryResponseCallback callback);
-  void HandleGetAction(int64_t action_id, HistoryResponseCallback callback);
+                        ResponseCallback callback);
+  void HandleGetAction(int64_t action_id, ResponseCallback callback);
   void HandleGetActionScreenshot(int64_t action_id,
                                  const std::string& type,
-                                 HistoryResponseCallback callback);
+                                 ResponseCallback callback);
   void HandleDeleteActions(const std::string& query,
-                           HistoryResponseCallback callback);
+                           ResponseCallback callback);
 
   void HandleGetEvents(const std::string& query,
-                       HistoryResponseCallback callback);
-  void HandleGetEvent(int64_t event_id, HistoryResponseCallback callback);
+                       ResponseCallback callback);
+  void HandleGetEvent(int64_t event_id, ResponseCallback callback);
   void HandleDeleteEvents(const std::string& query,
-                          HistoryResponseCallback callback);
+                          ResponseCallback callback);
 
   void HandleDeleteAll(const std::string& query,
-                       HistoryResponseCallback callback);
+                       ResponseCallback callback);
 
   // Callback handlers
-  void OnSessionsResult(HistoryResponseCallback callback, SessionsResult result);
-  void OnSessionResult(HistoryResponseCallback callback,
+  void OnSessionsResult(ResponseCallback callback, SessionsResult result);
+  void OnSessionResult(ResponseCallback callback,
                        std::optional<SessionRecord> session);
-  void OnActionsResult(HistoryResponseCallback callback, ActionsResult result);
-  void OnActionResult(HistoryResponseCallback callback,
+  void OnActionsResult(ResponseCallback callback, ActionsResult result);
+  void OnActionResult(ResponseCallback callback,
                       std::optional<ActionRecord> action);
-  void OnEventsResult(HistoryResponseCallback callback, EventsResult result);
-  void OnEventResult(HistoryResponseCallback callback,
+  void OnEventsResult(ResponseCallback callback, EventsResult result);
+  void OnEventResult(ResponseCallback callback,
                      std::optional<EventRecord> event);
-  void OnDeleteResult(HistoryResponseCallback callback, DeleteResult result);
-  void OnBulkDeleteResult(HistoryResponseCallback callback,
+  void OnDeleteResult(ResponseCallback callback, DeleteResult result);
+  void OnBulkDeleteResult(ResponseCallback callback,
                           BulkDeleteResult result);
 
   // Screenshot file serving
-  void OnActionForScreenshot(HistoryResponseCallback callback,
+  void OnActionForScreenshot(ResponseCallback callback,
                              const std::string& type,
                              std::optional<ActionRecord> action);
 
   // Export helpers
-  void OnExportSessionResult(HistoryResponseCallback callback,
+  void OnExportSessionResult(ResponseCallback callback,
                              const std::string& query,
                              std::optional<SessionRecord> session);
-  void OnExportActionsResult(HistoryResponseCallback callback,
+  void OnExportActionsResult(ResponseCallback callback,
                              SessionRecord session,
                              const std::string& events_cursor,
                              int chunk_size,
                              bool include_screenshots,
                              ActionsResult actions);
-  void OnExportEventsResult(HistoryResponseCallback callback,
+  void OnExportEventsResult(ResponseCallback callback,
                             SessionRecord session,
                             ActionsResult actions,
                             bool include_screenshots,
                             EventsResult events);
 
   // Helper methods
-  void SendJson(int status, base::Value value, HistoryResponseCallback callback);
+  void SendJson(int status, base::Value value, ResponseCallback callback);
   void SendError(int status,
                  const std::string& error_code,
                  const std::string& message,
-                 HistoryResponseCallback callback);
+                 ResponseCallback callback);
   void SendBinaryFile(const base::FilePath& path,
                       const std::string& content_type,
-                      HistoryResponseCallback callback);
+                      ResponseCallback callback);
 
   // Parse query string into key-value pairs
   static std::map<std::string, std::string> ParseQuery(const std::string& query);

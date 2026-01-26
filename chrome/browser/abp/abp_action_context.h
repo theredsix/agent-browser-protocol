@@ -5,12 +5,12 @@
 #include <string>
 #include <vector>
 
-#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/abp/abp_event_collector.h"
+#include "chrome/browser/abp/abp_types.h"
 
 namespace content {
 class WebContents;
@@ -20,11 +20,6 @@ namespace abp {
 
 class AbpController;
 class AbpCdpClient;
-
-// Callback signature for response (content_type for JSON vs binary responses)
-using ResponseCallback = base::OnceCallback<void(int status,
-                                                  const std::string& content_type,
-                                                  std::string body)>;
 
 // Forward declaration for the action callback
 class AbpActionContext;

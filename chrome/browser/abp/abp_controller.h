@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -17,6 +16,7 @@
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "chrome/browser/abp/abp_types.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-forward.h"
 
@@ -75,12 +75,6 @@ struct ActionContext {
   int64_t start_time = 0;
   std::string screenshot_before_path;
 };
-
-// Response callback with content type support for binary responses
-// content_type: "application/json" for JSON, "image/webp" for binary screenshots
-using ResponseCallback = base::OnceCallback<void(int status,
-                                                  const std::string& content_type,
-                                                  std::string body)>;
 
 // CDP client for sending commands and receiving responses/events
 class AbpCdpClient : public content::DevToolsAgentHostClient {

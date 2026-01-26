@@ -273,7 +273,7 @@ base::FilePath AbpHistoryController::GetScreenshotPath(const std::string& tab_id
 void AbpHistoryController::HandleRequest(const std::string& method,
                                          const std::string& path,
                                          const std::string& body,
-                                         HistoryResponseCallback callback) {
+                                         ResponseCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (!enabled_) {
@@ -454,7 +454,7 @@ void AbpHistoryController::HandleRequest(const std::string& method,
 // Session handlers
 
 void AbpHistoryController::HandleGetSessions(const std::string& query,
-                                             HistoryResponseCallback callback) {
+                                             ResponseCallback callback) {
   auto params = ParseQueryString(query);
 
   int limit = 20;
@@ -482,7 +482,7 @@ void AbpHistoryController::HandleGetSessions(const std::string& query,
 }
 
 void AbpHistoryController::HandleGetCurrentSession(
-    HistoryResponseCallback callback) {
+    ResponseCallback callback) {
   database_->GetSession(
       session_id_,
       base::BindOnce(&AbpHistoryController::OnSessionResult,
@@ -490,14 +490,14 @@ void AbpHistoryController::HandleGetCurrentSession(
 }
 
 void AbpHistoryController::HandleGetSession(const std::string& session_id,
-                                            HistoryResponseCallback callback) {
+                                            ResponseCallback callback) {
   database_->GetSession(
       session_id,
       base::BindOnce(&AbpHistoryController::OnSessionResult,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void AbpHistoryController::OnSessionsResult(HistoryResponseCallback callback,
+void AbpHistoryController::OnSessionsResult(ResponseCallback callback,
                                             SessionsResult result) {
   base::Value::Dict response;
   response.Set("success", true);
@@ -526,7 +526,7 @@ void AbpHistoryController::OnSessionsResult(HistoryResponseCallback callback,
 }
 
 void AbpHistoryController::OnSessionResult(
-    HistoryResponseCallback callback,
+    ResponseCallback callback,
     std::optional<SessionRecord> session) {
   if (!session) {
     SendError(404, "SESSION_NOT_FOUND", "Session not found",
@@ -543,7 +543,7 @@ void AbpHistoryController::OnSessionResult(
 // Action handlers
 
 void AbpHistoryController::HandleGetActions(const std::string& query,
-                                            HistoryResponseCallback callback) {
+                                            ResponseCallback callback) {
   auto params = ParseQueryString(query);
 
   ActionQueryFilter filter;
@@ -583,7 +583,7 @@ void AbpHistoryController::HandleGetActions(const std::string& query,
 }
 
 void AbpHistoryController::HandleGetAction(int64_t action_id,
-                                           HistoryResponseCallback callback) {
+                                           ResponseCallback callback) {
   database_->GetAction(
       action_id, base::BindOnce(&AbpHistoryController::OnActionResult,
                                 weak_factory_.GetWeakPtr(), std::move(callback)));
@@ -592,7 +592,7 @@ void AbpHistoryController::HandleGetAction(int64_t action_id,
 void AbpHistoryController::HandleGetActionScreenshot(
     int64_t action_id,
     const std::string& type,
-    HistoryResponseCallback callback) {
+    ResponseCallback callback) {
   database_->GetAction(
       action_id, base::BindOnce(&AbpHistoryController::OnActionForScreenshot,
                                 weak_factory_.GetWeakPtr(), std::move(callback),
@@ -600,7 +600,7 @@ void AbpHistoryController::HandleGetActionScreenshot(
 }
 
 void AbpHistoryController::HandleDeleteActions(const std::string& query,
-                                               HistoryResponseCallback callback) {
+                                               ResponseCallback callback) {
   auto params = ParseQueryString(query);
 
   std::string session_id = params.count("session_id") ? params["session_id"] : "";
@@ -616,7 +616,7 @@ void AbpHistoryController::HandleDeleteActions(const std::string& query,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void AbpHistoryController::OnActionsResult(HistoryResponseCallback callback,
+void AbpHistoryController::OnActionsResult(ResponseCallback callback,
                                            ActionsResult result) {
   base::Value::Dict response;
   response.Set("success", true);
@@ -645,7 +645,7 @@ void AbpHistoryController::OnActionsResult(HistoryResponseCallback callback,
 }
 
 void AbpHistoryController::OnActionResult(
-    HistoryResponseCallback callback,
+    ResponseCallback callback,
     std::optional<ActionRecord> action) {
   if (!action) {
     SendError(404, "ACTION_NOT_FOUND", "Action not found",
@@ -660,7 +660,7 @@ void AbpHistoryController::OnActionResult(
 }
 
 void AbpHistoryController::OnActionForScreenshot(
-    HistoryResponseCallback callback,
+    ResponseCallback callback,
     const std::string& type,
     std::optional<ActionRecord> action) {
   if (!action) {
@@ -689,7 +689,7 @@ void AbpHistoryController::OnActionForScreenshot(
 // Event handlers
 
 void AbpHistoryController::HandleGetEvents(const std::string& query,
-                                           HistoryResponseCallback callback) {
+                                           ResponseCallback callback) {
   auto params = ParseQueryString(query);
 
   EventQueryFilter filter;
@@ -725,14 +725,14 @@ void AbpHistoryController::HandleGetEvents(const std::string& query,
 }
 
 void AbpHistoryController::HandleGetEvent(int64_t event_id,
-                                          HistoryResponseCallback callback) {
+                                          ResponseCallback callback) {
   database_->GetEvent(
       event_id, base::BindOnce(&AbpHistoryController::OnEventResult,
                                weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void AbpHistoryController::HandleDeleteEvents(const std::string& query,
-                                              HistoryResponseCallback callback) {
+                                              ResponseCallback callback) {
   auto params = ParseQueryString(query);
 
   std::string session_id = params.count("session_id") ? params["session_id"] : "";
@@ -749,7 +749,7 @@ void AbpHistoryController::HandleDeleteEvents(const std::string& query,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void AbpHistoryController::OnEventsResult(HistoryResponseCallback callback,
+void AbpHistoryController::OnEventsResult(ResponseCallback callback,
                                           EventsResult result) {
   base::Value::Dict response;
   response.Set("success", true);
@@ -778,7 +778,7 @@ void AbpHistoryController::OnEventsResult(HistoryResponseCallback callback,
 }
 
 void AbpHistoryController::OnEventResult(
-    HistoryResponseCallback callback,
+    ResponseCallback callback,
     std::optional<EventRecord> event) {
   if (!event) {
     SendError(404, "EVENT_NOT_FOUND", "Event not found", std::move(callback));
@@ -794,7 +794,7 @@ void AbpHistoryController::OnEventResult(
 // Delete handlers
 
 void AbpHistoryController::HandleDeleteAll(const std::string& query,
-                                           HistoryResponseCallback callback) {
+                                           ResponseCallback callback) {
   auto params = ParseQueryString(query);
 
   bool confirm = params.count("confirm") && params["confirm"] == "true";
@@ -813,7 +813,7 @@ void AbpHistoryController::HandleDeleteAll(const std::string& query,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void AbpHistoryController::OnDeleteResult(HistoryResponseCallback callback,
+void AbpHistoryController::OnDeleteResult(ResponseCallback callback,
                                           DeleteResult result) {
   base::Value::Dict response;
   response.Set("success", true);
@@ -825,7 +825,7 @@ void AbpHistoryController::OnDeleteResult(HistoryResponseCallback callback,
   SendJson(200, base::Value(std::move(response)), std::move(callback));
 }
 
-void AbpHistoryController::OnBulkDeleteResult(HistoryResponseCallback callback,
+void AbpHistoryController::OnBulkDeleteResult(ResponseCallback callback,
                                               BulkDeleteResult result) {
   base::Value::Dict response;
   response.Set("success", true);
@@ -844,7 +844,7 @@ void AbpHistoryController::OnBulkDeleteResult(HistoryResponseCallback callback,
 void AbpHistoryController::HandleExportSession(
     const std::string& session_id,
     const std::string& query,
-    HistoryResponseCallback callback) {
+    ResponseCallback callback) {
   database_->GetSession(
       session_id,
       base::BindOnce(&AbpHistoryController::OnExportSessionResult,
@@ -852,7 +852,7 @@ void AbpHistoryController::HandleExportSession(
 }
 
 void AbpHistoryController::OnExportSessionResult(
-    HistoryResponseCallback callback,
+    ResponseCallback callback,
     const std::string& query,
     std::optional<SessionRecord> session) {
   if (!session) {
@@ -897,7 +897,7 @@ void AbpHistoryController::OnExportSessionResult(
 }
 
 void AbpHistoryController::OnExportActionsResult(
-    HistoryResponseCallback callback,
+    ResponseCallback callback,
     SessionRecord session,
     const std::string& events_cursor,
     int chunk_size,
@@ -919,7 +919,7 @@ void AbpHistoryController::OnExportActionsResult(
 }
 
 void AbpHistoryController::OnExportEventsResult(
-    HistoryResponseCallback callback,
+    ResponseCallback callback,
     SessionRecord session,
     ActionsResult actions,
     bool include_screenshots,
@@ -987,7 +987,7 @@ void AbpHistoryController::OnExportEventsResult(
 
 void AbpHistoryController::SendJson(int status,
                                     base::Value value,
-                                    HistoryResponseCallback callback) {
+                                    ResponseCallback callback) {
   std::string json;
   base::JSONWriter::Write(value, &json);
   std::move(callback).Run(status, "application/json", std::move(json));
@@ -996,7 +996,7 @@ void AbpHistoryController::SendJson(int status,
 void AbpHistoryController::SendError(int status,
                                      const std::string& error_code,
                                      const std::string& message,
-                                     HistoryResponseCallback callback) {
+                                     ResponseCallback callback) {
   base::Value::Dict response;
   response.Set("success", false);
   response.Set("error", error_code);
@@ -1006,12 +1006,12 @@ void AbpHistoryController::SendError(int status,
 
 void AbpHistoryController::SendBinaryFile(const base::FilePath& path,
                                           const std::string& content_type,
-                                          HistoryResponseCallback callback) {
+                                          ResponseCallback callback) {
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock()},
       base::BindOnce(&ReadFileContent, path),
       base::BindOnce(
-          [](HistoryResponseCallback cb, const std::string& content_type,
+          [](ResponseCallback cb, const std::string& content_type,
              std::string content) {
             if (content.empty()) {
               base::Value::Dict error;

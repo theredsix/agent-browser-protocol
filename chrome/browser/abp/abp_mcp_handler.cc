@@ -826,7 +826,7 @@ void AbpMcpHandler::HandleRequest(
     const std::string& method,
     const std::map<std::string, std::string>& headers,
     const std::string& body,
-    McpResponseCallback callback) {
+    ResponseCallback callback) {
   // Handle GET request (SSE stream) - not implemented yet
   if (method == "GET") {
     // For now, return method not allowed
@@ -918,7 +918,7 @@ void AbpMcpHandler::HandleRequest(
 
 void AbpMcpHandler::HandleInitialize(const base::Value::Dict& params,
                                      int request_id,
-                                     McpResponseCallback callback) {
+                                     ResponseCallback callback) {
   // Extract client info
   std::string client_name = "unknown";
   std::string client_version = "unknown";
@@ -975,7 +975,7 @@ void AbpMcpHandler::HandleInitialize(const base::Value::Dict& params,
 }
 
 void AbpMcpHandler::HandleToolsList(int request_id,
-                                    McpResponseCallback callback) {
+                                    ResponseCallback callback) {
   base::Value::Dict result;
   result.Set("tools", GetToolDefinitions());
 
@@ -985,7 +985,7 @@ void AbpMcpHandler::HandleToolsList(int request_id,
 
 void AbpMcpHandler::HandleToolsCall(const base::Value::Dict& params,
                                     int request_id,
-                                    McpResponseCallback callback) {
+                                    ResponseCallback callback) {
   const std::string* name = params.FindString("name");
   if (!name) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tool name",
@@ -1068,7 +1068,7 @@ void AbpMcpHandler::HandleToolsCall(const base::Value::Dict& params,
 
 void AbpMcpHandler::CallBrowserGetStatus(const base::Value::Dict& args,
                                          int request_id,
-                                         McpResponseCallback callback) {
+                                         ResponseCallback callback) {
   controller_->GetBrowserStatus(
       base::BindOnce(&AbpMcpHandler::OnControllerResponse,
                      weak_factory_.GetWeakPtr(), request_id,
@@ -1077,7 +1077,7 @@ void AbpMcpHandler::CallBrowserGetStatus(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserListTabs(const base::Value::Dict& args,
                                         int request_id,
-                                        McpResponseCallback callback) {
+                                        ResponseCallback callback) {
   controller_->HandleRequest(
       "GET", "/api/v1/tabs", "",
       base::BindOnce(&AbpMcpHandler::OnControllerResponse,
@@ -1087,7 +1087,7 @@ void AbpMcpHandler::CallBrowserListTabs(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserNewTab(const base::Value::Dict& args,
                                       int request_id,
-                                      McpResponseCallback callback) {
+                                      ResponseCallback callback) {
   std::string body;
   base::JSONWriter::Write(base::Value(args.Clone()), &body);
 
@@ -1100,7 +1100,7 @@ void AbpMcpHandler::CallBrowserNewTab(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserCloseTab(const base::Value::Dict& args,
                                         int request_id,
-                                        McpResponseCallback callback) {
+                                        ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1117,7 +1117,7 @@ void AbpMcpHandler::CallBrowserCloseTab(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserGetTabInfo(const base::Value::Dict& args,
                                           int request_id,
-                                          McpResponseCallback callback) {
+                                          ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1134,7 +1134,7 @@ void AbpMcpHandler::CallBrowserGetTabInfo(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserNavigate(const base::Value::Dict& args,
                                         int request_id,
-                                        McpResponseCallback callback) {
+                                        ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1158,7 +1158,7 @@ void AbpMcpHandler::CallBrowserNavigate(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserGoBack(const base::Value::Dict& args,
                                       int request_id,
-                                      McpResponseCallback callback) {
+                                      ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1175,7 +1175,7 @@ void AbpMcpHandler::CallBrowserGoBack(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserGoForward(const base::Value::Dict& args,
                                          int request_id,
-                                         McpResponseCallback callback) {
+                                         ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1192,7 +1192,7 @@ void AbpMcpHandler::CallBrowserGoForward(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserReload(const base::Value::Dict& args,
                                       int request_id,
-                                      McpResponseCallback callback) {
+                                      ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1216,7 +1216,7 @@ void AbpMcpHandler::CallBrowserReload(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserClick(const base::Value::Dict& args,
                                      int request_id,
-                                     McpResponseCallback callback) {
+                                     ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1240,7 +1240,7 @@ void AbpMcpHandler::CallBrowserClick(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserType(const base::Value::Dict& args,
                                     int request_id,
-                                    McpResponseCallback callback) {
+                                    ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1264,7 +1264,7 @@ void AbpMcpHandler::CallBrowserType(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserScreenshot(const base::Value::Dict& args,
                                           int request_id,
-                                          McpResponseCallback callback) {
+                                          ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1304,7 +1304,7 @@ void AbpMcpHandler::CallBrowserScreenshot(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserExecuteJavascript(const base::Value::Dict& args,
                                                  int request_id,
-                                                 McpResponseCallback callback) {
+                                                 ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1336,7 +1336,7 @@ void AbpMcpHandler::CallBrowserExecuteJavascript(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserKeyboardPress(const base::Value::Dict& args,
                                              int request_id,
-                                             McpResponseCallback callback) {
+                                             ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1360,7 +1360,7 @@ void AbpMcpHandler::CallBrowserKeyboardPress(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserScroll(const base::Value::Dict& args,
                                       int request_id,
-                                      McpResponseCallback callback) {
+                                      ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1384,7 +1384,7 @@ void AbpMcpHandler::CallBrowserScroll(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserMouseMove(const base::Value::Dict& args,
                                          int request_id,
-                                         McpResponseCallback callback) {
+                                         ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1408,7 +1408,7 @@ void AbpMcpHandler::CallBrowserMouseMove(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserActivateTab(const base::Value::Dict& args,
                                            int request_id,
-                                           McpResponseCallback callback) {
+                                           ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1425,7 +1425,7 @@ void AbpMcpHandler::CallBrowserActivateTab(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserStopLoading(const base::Value::Dict& args,
                                            int request_id,
-                                           McpResponseCallback callback) {
+                                           ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1442,7 +1442,7 @@ void AbpMcpHandler::CallBrowserStopLoading(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserGetDialog(const base::Value::Dict& args,
                                          int request_id,
-                                         McpResponseCallback callback) {
+                                         ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1459,7 +1459,7 @@ void AbpMcpHandler::CallBrowserGetDialog(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserAcceptDialog(const base::Value::Dict& args,
                                             int request_id,
-                                            McpResponseCallback callback) {
+                                            ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1483,7 +1483,7 @@ void AbpMcpHandler::CallBrowserAcceptDialog(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserDismissDialog(const base::Value::Dict& args,
                                              int request_id,
-                                             McpResponseCallback callback) {
+                                             ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1500,7 +1500,7 @@ void AbpMcpHandler::CallBrowserDismissDialog(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserListDownloads(const base::Value::Dict& args,
                                              int request_id,
-                                             McpResponseCallback callback) {
+                                             ResponseCallback callback) {
   // Build query string from optional params
   std::string path = "/api/v1/downloads";
   std::vector<std::string> query_parts;
@@ -1529,7 +1529,7 @@ void AbpMcpHandler::CallBrowserListDownloads(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserGetDownload(const base::Value::Dict& args,
                                            int request_id,
-                                           McpResponseCallback callback) {
+                                           ResponseCallback callback) {
   const std::string* download_id = args.FindString("download_id");
   if (!download_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing download_id",
@@ -1546,7 +1546,7 @@ void AbpMcpHandler::CallBrowserGetDownload(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserCancelDownload(const base::Value::Dict& args,
                                               int request_id,
-                                              McpResponseCallback callback) {
+                                              ResponseCallback callback) {
   const std::string* download_id = args.FindString("download_id");
   if (!download_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing download_id",
@@ -1563,7 +1563,7 @@ void AbpMcpHandler::CallBrowserCancelDownload(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserProvideFiles(const base::Value::Dict& args,
                                             int request_id,
-                                            McpResponseCallback callback) {
+                                            ResponseCallback callback) {
   const std::string* chooser_id = args.FindString("chooser_id");
   if (!chooser_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing chooser_id",
@@ -1587,7 +1587,7 @@ void AbpMcpHandler::CallBrowserProvideFiles(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserKeyboardDown(const base::Value::Dict& args,
                                             int request_id,
-                                            McpResponseCallback callback) {
+                                            ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1611,7 +1611,7 @@ void AbpMcpHandler::CallBrowserKeyboardDown(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserKeyboardUp(const base::Value::Dict& args,
                                           int request_id,
-                                          McpResponseCallback callback) {
+                                          ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1635,7 +1635,7 @@ void AbpMcpHandler::CallBrowserKeyboardUp(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserGetExecutionState(const base::Value::Dict& args,
                                                  int request_id,
-                                                 McpResponseCallback callback) {
+                                                 ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1652,7 +1652,7 @@ void AbpMcpHandler::CallBrowserGetExecutionState(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserSetExecutionState(const base::Value::Dict& args,
                                                  int request_id,
-                                                 McpResponseCallback callback) {
+                                                 ResponseCallback callback) {
   const std::string* tab_id = args.FindString("tab_id");
   if (!tab_id) {
     SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
@@ -1676,7 +1676,7 @@ void AbpMcpHandler::CallBrowserSetExecutionState(const base::Value::Dict& args,
 
 void AbpMcpHandler::CallBrowserShutdown(const base::Value::Dict& args,
                                         int request_id,
-                                        McpResponseCallback callback) {
+                                        ResponseCallback callback) {
   // Forward all args to REST API
   std::string body;
   base::JSONWriter::Write(base::Value(args.Clone()), &body);
@@ -1689,7 +1689,7 @@ void AbpMcpHandler::CallBrowserShutdown(const base::Value::Dict& args,
 }
 
 void AbpMcpHandler::OnControllerResponse(int request_id,
-                                         McpResponseCallback callback,
+                                         ResponseCallback callback,
                                          int status,
                                          const std::string& content_type,
                                          std::string body) {
@@ -1729,7 +1729,7 @@ void AbpMcpHandler::OnControllerResponse(int request_id,
 
 void AbpMcpHandler::SendJsonRpcResult(int request_id,
                                       base::Value result,
-                                      McpResponseCallback callback) {
+                                      ResponseCallback callback) {
   base::Value::Dict response;
   response.Set("jsonrpc", "2.0");
   response.Set("id", request_id);
@@ -1744,7 +1744,7 @@ void AbpMcpHandler::SendJsonRpcResult(int request_id,
 void AbpMcpHandler::SendJsonRpcError(int request_id,
                                      int error_code,
                                      const std::string& message,
-                                     McpResponseCallback callback) {
+                                     ResponseCallback callback) {
   base::Value::Dict response;
   response.Set("jsonrpc", "2.0");
   response.Set("id", request_id);
@@ -1760,7 +1760,7 @@ void AbpMcpHandler::SendJsonRpcError(int request_id,
   std::move(callback).Run(200, "application/json", response_json);
 }
 
-void AbpMcpHandler::SendAccepted(McpResponseCallback callback) {
+void AbpMcpHandler::SendAccepted(ResponseCallback callback) {
   std::move(callback).Run(202, "application/json", "");
 }
 
