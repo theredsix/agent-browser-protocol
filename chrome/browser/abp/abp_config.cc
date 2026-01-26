@@ -2,12 +2,14 @@
 
 #include "base/command_line.h"
 #include "base/environment.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/uuid.h"
+#include "build/build_config.h"
 #include "chrome/browser/abp/abp_switches.h"
 #include "chrome/common/chrome_paths.h"
 
@@ -25,10 +27,10 @@ base::FilePath ExpandPath(const std::string& path_str) {
   if (base::StartsWith(expanded, "~/", base::CompareCase::SENSITIVE)) {
     base::FilePath home_dir;
     if (base::PathService::Get(base::DIR_HOME, &home_dir)) {
-      expanded = home_dir.value() + expanded.substr(1);
+      expanded = home_dir.AsUTF8Unsafe() + expanded.substr(1);
     }
   }
-  return base::FilePath(expanded);
+  return base::FilePath::FromUTF8Unsafe(expanded);
 }
 
 base::FilePath GetDefaultConfigDir() {
@@ -36,11 +38,19 @@ base::FilePath GetDefaultConfigDir() {
   if (base::PathService::Get(chrome::DIR_USER_DATA, &config_dir)) {
     return config_dir;
   }
+#if BUILDFLAG(IS_WIN)
+  // Fallback to %LOCALAPPDATA%\Chromium
+  base::FilePath local_app_data;
+  if (base::PathService::Get(base::DIR_LOCAL_APP_DATA, &local_app_data)) {
+    return local_app_data.AppendASCII("Chromium");
+  }
+#else
   // Fallback to ~/.config/chromium
   base::FilePath home_dir;
   if (base::PathService::Get(base::DIR_HOME, &home_dir)) {
-    return home_dir.Append(".config").Append("chromium");
+    return home_dir.AppendASCII(".config").AppendASCII("chromium");
   }
+#endif
   return base::FilePath();
 }
 
@@ -50,8 +60,12 @@ base::FilePath GetDefaultConfigDir() {
 AbpConfig AbpConfig::GetDefaults() {
   // Generate UUID for session directory
   std::string uuid = base::Uuid::GenerateRandomV4().AsLowercaseString();
-  base::FilePath session_dir =
-      base::FilePath("/tmp").Append("abp-" + uuid);
+  base::FilePath temp_dir;
+  if (!base::GetTempDir(&temp_dir)) {
+    // Fallback - should not happen in normal circumstances
+    temp_dir = base::FilePath::FromUTF8Unsafe("/tmp");
+  }
+  base::FilePath session_dir = temp_dir.AppendASCII("abp-" + uuid);
 
   return GetDefaultsWithSessionDir(session_dir);
 }
@@ -63,9 +77,9 @@ AbpConfig AbpConfig::GetDefaultsWithSessionDir(
   config.session_dir = session_dir;
 
   config.history.enabled = true;
-  config.history.database_path = session_dir.Append("history.db");
+  config.history.database_path = session_dir.AppendASCII("history.db");
   config.history.screenshots.enabled = true;
-  config.history.screenshots.directory = session_dir.Append("screenshots");
+  config.history.screenshots.directory = session_dir.AppendASCII("screenshots");
 
   return config;
 }
@@ -152,8 +166,8 @@ AbpConfig LoadAbpConfig() {
     // Override session_dir if specified via command line
     if (!session_dir.empty()) {
       config.session_dir = session_dir;
-      config.history.database_path = session_dir.Append("history.db");
-      config.history.screenshots.directory = session_dir.Append("screenshots");
+      config.history.database_path = session_dir.AppendASCII("history.db");
+      config.history.screenshots.directory = session_dir.AppendASCII("screenshots");
     }
     return config;
   }
@@ -161,14 +175,14 @@ AbpConfig LoadAbpConfig() {
   // Try default config location
   base::FilePath config_dir = GetDefaultConfigDir();
   if (!config_dir.empty()) {
-    base::FilePath default_config = config_dir.Append("abp_config.json");
+    base::FilePath default_config = config_dir.AppendASCII("abp_config.json");
     if (base::PathExists(default_config)) {
       AbpConfig config = LoadAbpConfigFromFile(default_config);
       // Override session_dir if specified via command line
       if (!session_dir.empty()) {
         config.session_dir = session_dir;
-        config.history.database_path = session_dir.Append("history.db");
-        config.history.screenshots.directory = session_dir.Append("screenshots");
+        config.history.database_path = session_dir.AppendASCII("history.db");
+        config.history.screenshots.directory = session_dir.AppendASCII("screenshots");
       }
       return config;
     }

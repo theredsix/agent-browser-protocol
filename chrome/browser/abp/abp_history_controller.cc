@@ -267,7 +267,7 @@ base::FilePath AbpHistoryController::GetScreenshotPath(const std::string& tab_id
 
   std::string filename = base::NumberToString(timestamp) + "_" + tab_id + "_" +
                          (is_before ? "before" : "after") + ".webp";
-  return config_.history.screenshots.directory.Append(filename);
+  return config_.history.screenshots.directory.AppendASCII(filename);
 }
 
 void AbpHistoryController::HandleRequest(const std::string& method,
@@ -682,7 +682,7 @@ void AbpHistoryController::OnActionForScreenshot(
     return;
   }
 
-  base::FilePath path(path_str);
+  base::FilePath path = base::FilePath::FromUTF8Unsafe(path_str);
   SendBinaryFile(path, "image/webp", std::move(callback));
 }
 
@@ -938,14 +938,14 @@ void AbpHistoryController::OnExportEventsResult(
     // Include base64 screenshots if requested
     if (include_screenshots) {
       if (!action.screenshot_before_path.empty()) {
-        base::FilePath path(action.screenshot_before_path);
+        base::FilePath path = base::FilePath::FromUTF8Unsafe(action.screenshot_before_path);
         std::string content;
         if (base::ReadFileToString(path, &content)) {
           action_dict.Set("screenshot_before", base::Base64Encode(content));
         }
       }
       if (!action.screenshot_after_path.empty()) {
-        base::FilePath path(action.screenshot_after_path);
+        base::FilePath path = base::FilePath::FromUTF8Unsafe(action.screenshot_after_path);
         std::string content;
         if (base::ReadFileToString(path, &content)) {
           action_dict.Set("screenshot_after", base::Base64Encode(content));

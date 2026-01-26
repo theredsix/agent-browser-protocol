@@ -285,7 +285,7 @@ void ProcessAndSaveScreenshot(
     LOG(INFO) << "ABP: Saved screenshot to " << screenshot_path.value();
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
-        base::BindOnce(std::move(callback), screenshot_path.value()));
+        base::BindOnce(std::move(callback), screenshot_path.AsUTF8Unsafe()));
   } else {
     LOG(WARNING) << "ABP: Failed to write screenshot to "
                  << screenshot_path.value();
@@ -762,7 +762,7 @@ void AbpController::OnHistoryScreenshotCaptured(
       base::BindOnce(
           [](base::FilePath p, std::vector<uint8_t> content) -> std::string {
             if (base::WriteFile(p, content)) {
-              return p.value();
+              return p.AsUTF8Unsafe();
             }
             return "";
           },

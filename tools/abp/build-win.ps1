@@ -32,7 +32,7 @@ Write-Host "Source: $ChromiumSrc"
 Set-Location $ChromiumSrc
 
 # Configure release build
-$GnArgs = 'is_debug=false is_component_build=false symbol_level=0 is_official_build=true chrome_pgo_phase=0'
+$GnArgs = 'is_debug=false is_component_build=false symbol_level=0 is_official_build=false'
 
 Write-Host "=== Configuring build with GN ===" -ForegroundColor Cyan
 & cmd /c "gn gen out/Release --args=`"$GnArgs`""
