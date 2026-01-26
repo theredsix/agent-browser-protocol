@@ -73,6 +73,14 @@ base::Value::List GetToolDefinitions() {
     url_prop.Set("type", "string");
     url_prop.Set("description", "URL to navigate to");
     props.Set("url", std::move(url_prop));
+    base::Value::Dict active_prop;
+    active_prop.Set("type", "boolean");
+    active_prop.Set("description", "Whether to activate the new tab");
+    props.Set("active", std::move(active_prop));
+    base::Value::Dict index_prop;
+    index_prop.Set("type", "number");
+    index_prop.Set("description", "Position in tab strip");
+    props.Set("index", std::move(index_prop));
     input_schema.Set("properties", std::move(props));
     tool.Set("inputSchema", std::move(input_schema));
     tools.Append(std::move(tool));
@@ -134,6 +142,10 @@ base::Value::List GetToolDefinitions() {
     url_prop.Set("type", "string");
     url_prop.Set("description", "URL to navigate to");
     props.Set("url", std::move(url_prop));
+    base::Value::Dict referrer_prop;
+    referrer_prop.Set("type", "string");
+    referrer_prop.Set("description", "Referrer URL");
+    props.Set("referrer", std::move(referrer_prop));
     input_schema.Set("properties", std::move(props));
     base::Value::List required;
     required.Append("tab_id");
@@ -195,6 +207,10 @@ base::Value::List GetToolDefinitions() {
     tab_id_prop.Set("type", "string");
     tab_id_prop.Set("description", "Target tab ID");
     props.Set("tab_id", std::move(tab_id_prop));
+    base::Value::Dict ignore_cache_prop;
+    ignore_cache_prop.Set("type", "boolean");
+    ignore_cache_prop.Set("description", "Force refresh ignoring cache");
+    props.Set("ignore_cache", std::move(ignore_cache_prop));
     input_schema.Set("properties", std::move(props));
     base::Value::List required;
     required.Append("tab_id");
@@ -223,6 +239,32 @@ base::Value::List GetToolDefinitions() {
     y_prop.Set("type", "number");
     y_prop.Set("description", "Y coordinate");
     props.Set("y", std::move(y_prop));
+    base::Value::Dict button_prop;
+    button_prop.Set("type", "string");
+    button_prop.Set("description", "Mouse button: left, right, middle");
+    base::Value::List button_enum;
+    button_enum.Append("left");
+    button_enum.Append("right");
+    button_enum.Append("middle");
+    button_prop.Set("enum", std::move(button_enum));
+    props.Set("button", std::move(button_prop));
+    base::Value::Dict click_count_prop;
+    click_count_prop.Set("type", "number");
+    click_count_prop.Set("description", "1=single, 2=double, 3=triple click");
+    props.Set("click_count", std::move(click_count_prop));
+    base::Value::Dict modifiers_prop;
+    modifiers_prop.Set("type", "array");
+    base::Value::Dict modifier_items;
+    modifier_items.Set("type", "string");
+    base::Value::List modifier_enum;
+    modifier_enum.Append("Shift");
+    modifier_enum.Append("Control");
+    modifier_enum.Append("Alt");
+    modifier_enum.Append("Meta");
+    modifier_items.Set("enum", std::move(modifier_enum));
+    modifiers_prop.Set("items", std::move(modifier_items));
+    modifiers_prop.Set("description", "Modifier keys to hold during click");
+    props.Set("modifiers", std::move(modifiers_prop));
     input_schema.Set("properties", std::move(props));
     base::Value::List required;
     required.Append("tab_id");
@@ -249,6 +291,10 @@ base::Value::List GetToolDefinitions() {
     text_prop.Set("type", "string");
     text_prop.Set("description", "Text to type");
     props.Set("text", std::move(text_prop));
+    base::Value::Dict delay_prop;
+    delay_prop.Set("type", "number");
+    delay_prop.Set("description", "Delay between keystrokes in milliseconds");
+    props.Set("delay_ms", std::move(delay_prop));
     input_schema.Set("properties", std::move(props));
     base::Value::List required;
     required.Append("tab_id");
@@ -276,6 +322,22 @@ base::Value::List GetToolDefinitions() {
                     "Element markup overlay: none, interactive, clickable, "
                     "typeable, inputs");
     props.Set("markup", std::move(markup_prop));
+    base::Value::Dict format_prop;
+    format_prop.Set("type", "string");
+    format_prop.Set("description", "Image format: png, webp, jpeg");
+    props.Set("format", std::move(format_prop));
+    base::Value::Dict area_prop;
+    area_prop.Set("type", "string");
+    area_prop.Set("description", "Capture area: none, viewport");
+    props.Set("area", std::move(area_prop));
+    base::Value::Dict cursor_prop;
+    cursor_prop.Set("type", "boolean");
+    cursor_prop.Set("description", "Include virtual cursor in screenshot");
+    props.Set("cursor", std::move(cursor_prop));
+    base::Value::Dict full_page_prop;
+    full_page_prop.Set("type", "boolean");
+    full_page_prop.Set("description", "Capture full scrollable page");
+    props.Set("full_page", std::move(full_page_prop));
     input_schema.Set("properties", std::move(props));
     base::Value::List required;
     required.Append("tab_id");
@@ -300,11 +362,449 @@ base::Value::List GetToolDefinitions() {
     expr_prop.Set("type", "string");
     expr_prop.Set("description", "JavaScript expression to evaluate");
     props.Set("expression", std::move(expr_prop));
+    base::Value::Dict await_prop;
+    await_prop.Set("type", "boolean");
+    await_prop.Set("description", "Wait for promise resolution");
+    props.Set("await_promise", std::move(await_prop));
+    base::Value::Dict timeout_prop;
+    timeout_prop.Set("type", "number");
+    timeout_prop.Set("description", "Timeout for promise resolution in ms");
+    props.Set("timeout_ms", std::move(timeout_prop));
     input_schema.Set("properties", std::move(props));
     base::Value::List required;
     required.Append("tab_id");
     required.Append("expression");
     input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_keyboard_press
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_keyboard_press");
+    tool.Set("description",
+             "Press a key or key combination (e.g., Enter, Escape, Ctrl+C)");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    base::Value::Dict key_prop;
+    key_prop.Set("type", "string");
+    key_prop.Set("description",
+                 "Key to press (e.g., Enter, Escape, a, F1, Tab)");
+    props.Set("key", std::move(key_prop));
+    base::Value::Dict modifiers_prop;
+    modifiers_prop.Set("type", "array");
+    base::Value::Dict modifier_items;
+    modifier_items.Set("type", "string");
+    base::Value::List modifier_enum;
+    modifier_enum.Append("Shift");
+    modifier_enum.Append("Control");
+    modifier_enum.Append("Alt");
+    modifier_enum.Append("Meta");
+    modifier_items.Set("enum", std::move(modifier_enum));
+    modifiers_prop.Set("items", std::move(modifier_items));
+    modifiers_prop.Set("description", "Modifier keys to hold during press");
+    props.Set("modifiers", std::move(modifiers_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    required.Append("key");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_scroll
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_scroll");
+    tool.Set("description", "Scroll the page using mouse wheel");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    base::Value::Dict x_prop;
+    x_prop.Set("type", "number");
+    x_prop.Set("description", "X coordinate for scroll position");
+    props.Set("x", std::move(x_prop));
+    base::Value::Dict y_prop;
+    y_prop.Set("type", "number");
+    y_prop.Set("description", "Y coordinate for scroll position");
+    props.Set("y", std::move(y_prop));
+    base::Value::Dict delta_x_prop;
+    delta_x_prop.Set("type", "number");
+    delta_x_prop.Set("description", "Horizontal scroll amount (negative = left)");
+    props.Set("delta_x", std::move(delta_x_prop));
+    base::Value::Dict delta_y_prop;
+    delta_y_prop.Set("type", "number");
+    delta_y_prop.Set("description", "Vertical scroll amount (negative = down)");
+    props.Set("delta_y", std::move(delta_y_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    required.Append("delta_y");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_mouse_move
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_mouse_move");
+    tool.Set("description", "Move mouse to coordinates (for hover effects)");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    base::Value::Dict x_prop;
+    x_prop.Set("type", "number");
+    x_prop.Set("description", "X coordinate");
+    props.Set("x", std::move(x_prop));
+    base::Value::Dict y_prop;
+    y_prop.Set("type", "number");
+    y_prop.Set("description", "Y coordinate");
+    props.Set("y", std::move(y_prop));
+    base::Value::Dict steps_prop;
+    steps_prop.Set("type", "number");
+    steps_prop.Set("description", "Intermediate steps for smooth movement");
+    props.Set("steps", std::move(steps_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    required.Append("x");
+    required.Append("y");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_activate_tab
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_activate_tab");
+    tool.Set("description", "Switch to a specific tab");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "ID of tab to activate");
+    props.Set("tab_id", std::move(tab_id_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_stop_loading
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_stop_loading");
+    tool.Set("description", "Stop page loading");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_get_dialog
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_get_dialog");
+    tool.Set("description",
+             "Check if a dialog (alert/confirm/prompt) is pending");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_accept_dialog
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_accept_dialog");
+    tool.Set("description", "Accept (click OK on) a pending dialog");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    base::Value::Dict prompt_text_prop;
+    prompt_text_prop.Set("type", "string");
+    prompt_text_prop.Set("description", "Text to enter for prompt dialogs");
+    props.Set("prompt_text", std::move(prompt_text_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_dismiss_dialog
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_dismiss_dialog");
+    tool.Set("description", "Dismiss (click Cancel on) a pending dialog");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_list_downloads
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_list_downloads");
+    tool.Set("description", "List all downloads");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict state_prop;
+    state_prop.Set("type", "string");
+    base::Value::List state_enum;
+    state_enum.Append("in_progress");
+    state_enum.Append("completed");
+    state_enum.Append("cancelled");
+    state_enum.Append("failed");
+    state_prop.Set("enum", std::move(state_enum));
+    state_prop.Set("description", "Filter by download state");
+    props.Set("state", std::move(state_prop));
+    base::Value::Dict limit_prop;
+    limit_prop.Set("type", "number");
+    limit_prop.Set("description", "Maximum number of downloads to return");
+    props.Set("limit", std::move(limit_prop));
+    input_schema.Set("properties", std::move(props));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_get_download
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_get_download");
+    tool.Set("description", "Get download status");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict download_id_prop;
+    download_id_prop.Set("type", "string");
+    download_id_prop.Set("description", "Download ID");
+    props.Set("download_id", std::move(download_id_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("download_id");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_cancel_download
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_cancel_download");
+    tool.Set("description", "Cancel an in-progress download");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict download_id_prop;
+    download_id_prop.Set("type", "string");
+    download_id_prop.Set("description", "Download ID");
+    props.Set("download_id", std::move(download_id_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("download_id");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_provide_files
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_provide_files");
+    tool.Set("description", "Provide files to a pending file chooser dialog");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict chooser_id_prop;
+    chooser_id_prop.Set("type", "string");
+    chooser_id_prop.Set("description", "File chooser ID from event");
+    props.Set("chooser_id", std::move(chooser_id_prop));
+    base::Value::Dict files_prop;
+    files_prop.Set("type", "array");
+    base::Value::Dict file_items;
+    file_items.Set("type", "string");
+    files_prop.Set("items", std::move(file_items));
+    files_prop.Set("description", "File paths to provide");
+    props.Set("files", std::move(files_prop));
+    base::Value::Dict path_prop;
+    path_prop.Set("type", "string");
+    path_prop.Set("description", "Save path for save dialogs");
+    props.Set("path", std::move(path_prop));
+    base::Value::Dict cancel_prop;
+    cancel_prop.Set("type", "boolean");
+    cancel_prop.Set("description", "Cancel the file chooser");
+    props.Set("cancel", std::move(cancel_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("chooser_id");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_keyboard_down
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_keyboard_down");
+    tool.Set("description", "Press and hold a key");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    base::Value::Dict key_prop;
+    key_prop.Set("type", "string");
+    key_prop.Set("description", "Key to press down");
+    props.Set("key", std::move(key_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    required.Append("key");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_keyboard_up
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_keyboard_up");
+    tool.Set("description", "Release a held key");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    base::Value::Dict key_prop;
+    key_prop.Set("type", "string");
+    key_prop.Set("description", "Key to release");
+    props.Set("key", std::move(key_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    required.Append("key");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_get_execution_state
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_get_execution_state");
+    tool.Set("description", "Get JavaScript execution state for a tab");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_set_execution_state
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_set_execution_state");
+    tool.Set("description", "Pause or resume JavaScript execution");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict tab_id_prop;
+    tab_id_prop.Set("type", "string");
+    tab_id_prop.Set("description", "Target tab ID");
+    props.Set("tab_id", std::move(tab_id_prop));
+    base::Value::Dict paused_prop;
+    paused_prop.Set("type", "boolean");
+    paused_prop.Set("description", "True to pause, false to resume");
+    props.Set("paused", std::move(paused_prop));
+    input_schema.Set("properties", std::move(props));
+    base::Value::List required;
+    required.Append("tab_id");
+    required.Append("paused");
+    input_schema.Set("required", std::move(required));
+    tool.Set("inputSchema", std::move(input_schema));
+    tools.Append(std::move(tool));
+  }
+
+  // browser_shutdown
+  {
+    base::Value::Dict tool;
+    tool.Set("name", "browser_shutdown");
+    tool.Set("description", "Gracefully shut down the browser");
+    base::Value::Dict input_schema;
+    input_schema.Set("type", "object");
+    base::Value::Dict props;
+    base::Value::Dict timeout_prop;
+    timeout_prop.Set("type", "number");
+    timeout_prop.Set("description", "Timeout before force quit in ms");
+    props.Set("timeout_ms", std::move(timeout_prop));
+    input_schema.Set("properties", std::move(props));
     tool.Set("inputSchema", std::move(input_schema));
     tools.Append(std::move(tool));
   }
@@ -526,6 +1026,40 @@ void AbpMcpHandler::HandleToolsCall(const base::Value::Dict& params,
     CallBrowserScreenshot(*args, request_id, std::move(callback));
   } else if (*name == "browser_execute_javascript") {
     CallBrowserExecuteJavascript(*args, request_id, std::move(callback));
+  } else if (*name == "browser_keyboard_press") {
+    CallBrowserKeyboardPress(*args, request_id, std::move(callback));
+  } else if (*name == "browser_scroll") {
+    CallBrowserScroll(*args, request_id, std::move(callback));
+  } else if (*name == "browser_mouse_move") {
+    CallBrowserMouseMove(*args, request_id, std::move(callback));
+  } else if (*name == "browser_activate_tab") {
+    CallBrowserActivateTab(*args, request_id, std::move(callback));
+  } else if (*name == "browser_stop_loading") {
+    CallBrowserStopLoading(*args, request_id, std::move(callback));
+  } else if (*name == "browser_get_dialog") {
+    CallBrowserGetDialog(*args, request_id, std::move(callback));
+  } else if (*name == "browser_accept_dialog") {
+    CallBrowserAcceptDialog(*args, request_id, std::move(callback));
+  } else if (*name == "browser_dismiss_dialog") {
+    CallBrowserDismissDialog(*args, request_id, std::move(callback));
+  } else if (*name == "browser_list_downloads") {
+    CallBrowserListDownloads(*args, request_id, std::move(callback));
+  } else if (*name == "browser_get_download") {
+    CallBrowserGetDownload(*args, request_id, std::move(callback));
+  } else if (*name == "browser_cancel_download") {
+    CallBrowserCancelDownload(*args, request_id, std::move(callback));
+  } else if (*name == "browser_provide_files") {
+    CallBrowserProvideFiles(*args, request_id, std::move(callback));
+  } else if (*name == "browser_keyboard_down") {
+    CallBrowserKeyboardDown(*args, request_id, std::move(callback));
+  } else if (*name == "browser_keyboard_up") {
+    CallBrowserKeyboardUp(*args, request_id, std::move(callback));
+  } else if (*name == "browser_get_execution_state") {
+    CallBrowserGetExecutionState(*args, request_id, std::move(callback));
+  } else if (*name == "browser_set_execution_state") {
+    CallBrowserSetExecutionState(*args, request_id, std::move(callback));
+  } else if (*name == "browser_shutdown") {
+    CallBrowserShutdown(*args, request_id, std::move(callback));
   } else {
     SendJsonRpcError(request_id, kMethodNotFound,
                      "Unknown tool: " + *name, std::move(callback));
@@ -608,10 +1142,9 @@ void AbpMcpHandler::CallBrowserNavigate(const base::Value::Dict& args,
     return;
   }
 
-  base::Value::Dict body_dict;
-  if (const std::string* url = args.FindString("url")) {
-    body_dict.Set("url", *url);
-  }
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
 
   std::string body;
   base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
@@ -667,8 +1200,15 @@ void AbpMcpHandler::CallBrowserReload(const base::Value::Dict& args,
     return;
   }
 
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
+
+  std::string body;
+  base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
+
   controller_->HandleRequest(
-      "POST", "/api/v1/tabs/" + *tab_id + "/reload", "",
+      "POST", "/api/v1/tabs/" + *tab_id + "/reload", body,
       base::BindOnce(&AbpMcpHandler::OnControllerResponse,
                      weak_factory_.GetWeakPtr(), request_id,
                      std::move(callback)));
@@ -684,13 +1224,9 @@ void AbpMcpHandler::CallBrowserClick(const base::Value::Dict& args,
     return;
   }
 
-  base::Value::Dict body_dict;
-  if (auto x = args.FindDouble("x")) {
-    body_dict.Set("x", *x);
-  }
-  if (auto y = args.FindDouble("y")) {
-    body_dict.Set("y", *y);
-  }
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
 
   std::string body;
   base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
@@ -712,10 +1248,9 @@ void AbpMcpHandler::CallBrowserType(const base::Value::Dict& args,
     return;
   }
 
-  base::Value::Dict body_dict;
-  if (const std::string* text = args.FindString("text")) {
-    body_dict.Set("text", *text);
-  }
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
 
   std::string body;
   base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
@@ -737,6 +1272,7 @@ void AbpMcpHandler::CallBrowserScreenshot(const base::Value::Dict& args,
     return;
   }
 
+  // Build screenshot options from flat args
   base::Value::Dict body_dict;
   base::Value::Dict screenshot_opts;
   if (const std::string* markup = args.FindString("markup")) {
@@ -744,6 +1280,15 @@ void AbpMcpHandler::CallBrowserScreenshot(const base::Value::Dict& args,
   }
   if (const std::string* format = args.FindString("format")) {
     screenshot_opts.Set("format", *format);
+  }
+  if (const std::string* area = args.FindString("area")) {
+    screenshot_opts.Set("area", *area);
+  }
+  if (auto cursor = args.FindBool("cursor")) {
+    screenshot_opts.Set("cursor", *cursor);
+  }
+  if (auto full_page = args.FindBool("full_page")) {
+    screenshot_opts.Set("full_page", *full_page);
   }
   body_dict.Set("screenshot", std::move(screenshot_opts));
 
@@ -767,9 +1312,16 @@ void AbpMcpHandler::CallBrowserExecuteJavascript(const base::Value::Dict& args,
     return;
   }
 
+  // Map MCP "expression" to REST "script", forward other params
   base::Value::Dict body_dict;
   if (const std::string* expression = args.FindString("expression")) {
     body_dict.Set("script", *expression);
+  }
+  if (auto await_promise = args.FindBool("await_promise")) {
+    body_dict.Set("await_promise", *await_promise);
+  }
+  if (auto timeout_ms = args.FindDouble("timeout_ms")) {
+    body_dict.Set("timeout_ms", static_cast<int>(*timeout_ms));
   }
 
   std::string body;
@@ -782,35 +1334,382 @@ void AbpMcpHandler::CallBrowserExecuteJavascript(const base::Value::Dict& args,
                      std::move(callback)));
 }
 
+void AbpMcpHandler::CallBrowserKeyboardPress(const base::Value::Dict& args,
+                                             int request_id,
+                                             McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
+
+  std::string body;
+  base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/tabs/" + *tab_id + "/keyboard/press", body,
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserScroll(const base::Value::Dict& args,
+                                      int request_id,
+                                      McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
+
+  std::string body;
+  base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/tabs/" + *tab_id + "/scroll", body,
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserMouseMove(const base::Value::Dict& args,
+                                         int request_id,
+                                         McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
+
+  std::string body;
+  base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/tabs/" + *tab_id + "/move", body,
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserActivateTab(const base::Value::Dict& args,
+                                           int request_id,
+                                           McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/tabs/" + *tab_id + "/activate", "",
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserStopLoading(const base::Value::Dict& args,
+                                           int request_id,
+                                           McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/tabs/" + *tab_id + "/stop", "",
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserGetDialog(const base::Value::Dict& args,
+                                         int request_id,
+                                         McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  controller_->HandleRequest(
+      "GET", "/api/v1/tabs/" + *tab_id + "/dialog", "",
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserAcceptDialog(const base::Value::Dict& args,
+                                            int request_id,
+                                            McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
+
+  std::string body;
+  base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/tabs/" + *tab_id + "/dialog/accept", body,
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserDismissDialog(const base::Value::Dict& args,
+                                             int request_id,
+                                             McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/tabs/" + *tab_id + "/dialog/dismiss", "",
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserListDownloads(const base::Value::Dict& args,
+                                             int request_id,
+                                             McpResponseCallback callback) {
+  // Build query string from optional params
+  std::string path = "/api/v1/downloads";
+  std::vector<std::string> query_parts;
+
+  if (const std::string* state = args.FindString("state")) {
+    query_parts.push_back("state=" + *state);
+  }
+  if (auto limit = args.FindDouble("limit")) {
+    query_parts.push_back("limit=" + base::NumberToString(static_cast<int>(*limit)));
+  }
+
+  if (!query_parts.empty()) {
+    path += "?";
+    for (size_t i = 0; i < query_parts.size(); ++i) {
+      if (i > 0) path += "&";
+      path += query_parts[i];
+    }
+  }
+
+  controller_->HandleRequest(
+      "GET", path, "",
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserGetDownload(const base::Value::Dict& args,
+                                           int request_id,
+                                           McpResponseCallback callback) {
+  const std::string* download_id = args.FindString("download_id");
+  if (!download_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing download_id",
+                     std::move(callback));
+    return;
+  }
+
+  controller_->HandleRequest(
+      "GET", "/api/v1/downloads/" + *download_id, "",
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserCancelDownload(const base::Value::Dict& args,
+                                              int request_id,
+                                              McpResponseCallback callback) {
+  const std::string* download_id = args.FindString("download_id");
+  if (!download_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing download_id",
+                     std::move(callback));
+    return;
+  }
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/downloads/" + *download_id + "/cancel", "",
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserProvideFiles(const base::Value::Dict& args,
+                                            int request_id,
+                                            McpResponseCallback callback) {
+  const std::string* chooser_id = args.FindString("chooser_id");
+  if (!chooser_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing chooser_id",
+                     std::move(callback));
+    return;
+  }
+
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("chooser_id");
+
+  std::string body;
+  base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/file-chooser/" + *chooser_id, body,
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserKeyboardDown(const base::Value::Dict& args,
+                                            int request_id,
+                                            McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
+
+  std::string body;
+  base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/tabs/" + *tab_id + "/keyboard/down", body,
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserKeyboardUp(const base::Value::Dict& args,
+                                          int request_id,
+                                          McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
+
+  std::string body;
+  base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/tabs/" + *tab_id + "/keyboard/up", body,
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserGetExecutionState(const base::Value::Dict& args,
+                                                 int request_id,
+                                                 McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  controller_->HandleRequest(
+      "GET", "/api/v1/tabs/" + *tab_id + "/execution", "",
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserSetExecutionState(const base::Value::Dict& args,
+                                                 int request_id,
+                                                 McpResponseCallback callback) {
+  const std::string* tab_id = args.FindString("tab_id");
+  if (!tab_id) {
+    SendJsonRpcError(request_id, kInvalidParams, "Missing tab_id",
+                     std::move(callback));
+    return;
+  }
+
+  // Forward all args except URL path params to REST API
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("tab_id");
+
+  std::string body;
+  base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/tabs/" + *tab_id + "/execution", body,
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
+void AbpMcpHandler::CallBrowserShutdown(const base::Value::Dict& args,
+                                        int request_id,
+                                        McpResponseCallback callback) {
+  // Forward all args to REST API
+  std::string body;
+  base::JSONWriter::Write(base::Value(args.Clone()), &body);
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/browser/shutdown", body,
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), request_id,
+                     std::move(callback)));
+}
+
 void AbpMcpHandler::OnControllerResponse(int request_id,
                                          McpResponseCallback callback,
                                          int status,
                                          const std::string& content_type,
                                          std::string body) {
   // Convert REST API response to MCP tool result
-  // The REST API returns: {"success": true, "data": {...}}
-  // We need to convert to: {"content": [{"type": "text", "text": "..."}]}
+  // Return the COMPLETE REST response, including screenshot, scroll, events,
+  // timing. MCP is a transport layer - don't strip data.
 
   base::Value::Dict result;
   base::Value::List content;
   base::Value::Dict text_content;
   text_content.Set("type", "text");
 
-  // Parse the REST response
+  // Parse and pretty-print the REST response
   auto parsed = base::JSONReader::Read(body, base::JSON_PARSE_RFC);
   if (parsed && parsed->is_dict()) {
-    const base::Value::Dict& response = parsed->GetDict();
-
-    // Check if it's a success response with data
-    if (const base::Value* data = response.Find("data")) {
-      std::string data_json;
-      base::JSONWriter::WriteWithOptions(
-          *data, base::JSONWriter::OPTIONS_PRETTY_PRINT, &data_json);
-      text_content.Set("text", data_json);
-    } else {
-      // Just return the whole response
-      text_content.Set("text", body);
-    }
+    // Return the complete REST response, not just data field
+    std::string pretty_json;
+    base::JSONWriter::WriteWithOptions(
+        *parsed, base::JSONWriter::OPTIONS_PRETTY_PRINT, &pretty_json);
+    text_content.Set("text", pretty_json);
   } else {
     // Not JSON, return as-is
     text_content.Set("text", body);

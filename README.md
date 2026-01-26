@@ -328,7 +328,29 @@ Configure in Claude Desktop (`claude_desktop_config.json`):
 
 Then ask Claude: "Go to news.ycombinator.com and find the top post about AI."
 
-Available tools: `browser_get_status`, `browser_list_tabs`, `browser_new_tab`, `browser_close_tab`, `browser_get_tab_info`, `browser_navigate`, `browser_go_back`, `browser_go_forward`, `browser_reload`, `browser_click`, `browser_type`, `browser_screenshot`, `browser_execute_javascript`
+**Available tools (30 total):**
+
+*Tab Management:* `browser_list_tabs`, `browser_new_tab`, `browser_close_tab`, `browser_get_tab_info`, `browser_activate_tab`, `browser_stop_loading`
+
+*Navigation:* `browser_navigate`, `browser_go_back`, `browser_go_forward`, `browser_reload`
+
+*Mouse:* `browser_click`, `browser_mouse_move`, `browser_scroll`
+
+*Keyboard:* `browser_type`, `browser_keyboard_press`, `browser_keyboard_down`, `browser_keyboard_up`
+
+*Screenshots:* `browser_screenshot`
+
+*JavaScript:* `browser_execute_javascript`
+
+*Dialogs:* `browser_get_dialog`, `browser_accept_dialog`, `browser_dismiss_dialog`
+
+*Downloads:* `browser_list_downloads`, `browser_get_download`, `browser_cancel_download`
+
+*Files:* `browser_provide_files`
+
+*Execution Control:* `browser_get_execution_state`, `browser_set_execution_state`
+
+*Browser:* `browser_get_status`, `browser_shutdown`
 
 ---
 
@@ -426,7 +448,7 @@ ABP is under active development. Current implementation:
 - Execution control (JS pause/resume, virtual time)
 - History tracking with SQLite
 - Virtual cursor rendering
-- MCP server with 14 tools
+- MCP server with 30 tools (full REST API parity)
 
 **Not yet implemented:**
 - Action success/failure tracking

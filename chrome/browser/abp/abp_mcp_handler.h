@@ -109,6 +109,57 @@ class AbpMcpHandler {
   void CallBrowserExecuteJavascript(const base::Value::Dict& args,
                                     int request_id,
                                     McpResponseCallback callback);
+  void CallBrowserKeyboardPress(const base::Value::Dict& args,
+                                int request_id,
+                                McpResponseCallback callback);
+  void CallBrowserScroll(const base::Value::Dict& args,
+                         int request_id,
+                         McpResponseCallback callback);
+  void CallBrowserMouseMove(const base::Value::Dict& args,
+                            int request_id,
+                            McpResponseCallback callback);
+  void CallBrowserActivateTab(const base::Value::Dict& args,
+                              int request_id,
+                              McpResponseCallback callback);
+  void CallBrowserStopLoading(const base::Value::Dict& args,
+                              int request_id,
+                              McpResponseCallback callback);
+  void CallBrowserGetDialog(const base::Value::Dict& args,
+                            int request_id,
+                            McpResponseCallback callback);
+  void CallBrowserAcceptDialog(const base::Value::Dict& args,
+                               int request_id,
+                               McpResponseCallback callback);
+  void CallBrowserDismissDialog(const base::Value::Dict& args,
+                                int request_id,
+                                McpResponseCallback callback);
+  void CallBrowserListDownloads(const base::Value::Dict& args,
+                                int request_id,
+                                McpResponseCallback callback);
+  void CallBrowserGetDownload(const base::Value::Dict& args,
+                              int request_id,
+                              McpResponseCallback callback);
+  void CallBrowserCancelDownload(const base::Value::Dict& args,
+                                 int request_id,
+                                 McpResponseCallback callback);
+  void CallBrowserProvideFiles(const base::Value::Dict& args,
+                               int request_id,
+                               McpResponseCallback callback);
+  void CallBrowserKeyboardDown(const base::Value::Dict& args,
+                               int request_id,
+                               McpResponseCallback callback);
+  void CallBrowserKeyboardUp(const base::Value::Dict& args,
+                             int request_id,
+                             McpResponseCallback callback);
+  void CallBrowserGetExecutionState(const base::Value::Dict& args,
+                                    int request_id,
+                                    McpResponseCallback callback);
+  void CallBrowserSetExecutionState(const base::Value::Dict& args,
+                                    int request_id,
+                                    McpResponseCallback callback);
+  void CallBrowserShutdown(const base::Value::Dict& args,
+                           int request_id,
+                           McpResponseCallback callback);
 
   // Response helpers
   void SendJsonRpcResult(int request_id,
