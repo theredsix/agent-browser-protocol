@@ -454,6 +454,7 @@ ABP is under active development. Current implementation:
 - Action success/failure tracking
 - Revert URL to last known success state
 - Revert browser to last known success state
+- Recording of human browsing sessions as training data for agent fine-tuning
 
 ---
 
