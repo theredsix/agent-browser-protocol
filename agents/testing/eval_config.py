@@ -21,7 +21,7 @@ class TestConfig:
     in `test_file` unless this object is constructed with `from_file`.
     """
     test_file: pathlib.Path
-    owner: str = None
+    owner: str | None = None
     runs_per_test: int = 1
     pass_k_threshold: int = 1
     precompile_targets: list = dataclasses.field(default_factory=list)

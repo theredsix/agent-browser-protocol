@@ -6,6 +6,7 @@
 import functools
 import logging
 import pathlib
+import platform
 import shutil
 import subprocess
 
@@ -21,8 +22,14 @@ def check_btrfs(root_path) -> bool:
         True if the given path can be verified to be on a btrfs partition,
         otherwise False.
     """
+    # stat command format differs between Linux and macOS
+    if platform.system() == 'Darwin':
+        stat_cmd = ['stat', '-f', '%i', root_path]
+    else:
+        stat_cmd = ['stat', '-c', '%i', root_path]
+
     result = subprocess.run(
-        ['stat', '-c', '%i', root_path],
+        stat_cmd,
         capture_output=True,
         check=True,
     )

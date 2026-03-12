@@ -84,6 +84,7 @@ class WorkDir(contextlib.AbstractContextManager):
         logging.info('Removing existing workdir: %s', self.path)
         cmd = ['sudo', 'btrfs', 'subvolume', 'delete', self.path]
         start_time = time.time()
+        result = None  # Initialize to avoid UnboundLocalError
         if self.btrfs:
             if self.force:
                 cmd.insert(1, '-n')
