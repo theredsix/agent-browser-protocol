@@ -5049,9 +5049,8 @@ void AbpController::EnterCdpMode(const base::Value::Dict& params,
       content::DevToolsAgentHost::RemoteDebuggingServerMode::kDefault);
 
   cdp_port_ = port;
-  // Construct ws_url directly — GetRemoteDebuggingServerAddress() returns empty
-  // because the server starts asynchronously on another thread.
-  cdp_ws_url_ = "ws://localhost:" + std::to_string(port) + "/devtools/browser";
+  // Use the bound address from FindAvailableCdpPort (127.0.0.1 or [::1]).
+  cdp_ws_url_ = "ws://" + cdp_bound_address_ + ":" + std::to_string(port) + "/devtools/browser";
 
   // Optional auto-exit timeout.
   std::optional<int> timeout_ms = params.FindInt("timeout_ms");
@@ -5191,10 +5190,18 @@ void AbpController::SetAllowSystemInputsForAllTabs(bool allow) {
 int AbpController::FindAvailableCdpPort(int start_port, int max_attempts) {
   for (int i = 0; i < max_attempts; ++i) {
     int port = start_port + i;
+    // Try IPv4 first (matches AbpCdpSocketFactory order).
     auto socket = std::make_unique<net::TCPServerSocket>(nullptr, net::NetLogSource());
     net::IPEndPoint endpoint(net::IPAddress::IPv4Localhost(), port);
-    int rv = socket->Listen(endpoint, 1 /* backlog */, std::nullopt);
-    if (rv == net::OK) {
+    if (socket->Listen(endpoint, 1, std::nullopt) == net::OK) {
+      cdp_bound_address_ = "127.0.0.1";
+      return port;
+    }
+    // Try IPv6 fallback.
+    socket = std::make_unique<net::TCPServerSocket>(nullptr, net::NetLogSource());
+    net::IPEndPoint endpoint6(net::IPAddress::IPv6Localhost(), port);
+    if (socket->Listen(endpoint6, 1, std::nullopt) == net::OK) {
+      cdp_bound_address_ = "[::1]";
       return port;
     }
   }

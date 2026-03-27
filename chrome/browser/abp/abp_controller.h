@@ -1200,6 +1200,7 @@ class AbpController : public TabStripModelObserver {
 
   // CDP mode state
   int cdp_port_ = 0;                    // Active CDP server port (0 = not running)
+  std::string cdp_bound_address_;       // IP address the CDP server bound to (127.0.0.1 or [::1])
   std::string cdp_ws_url_;              // Full WebSocket URL for browser target
   base::OneShotTimer cdp_timeout_timer_; // Auto-exit timer
   base::TimeTicks cdp_timeout_deadline_; // For remaining_ms calculation
