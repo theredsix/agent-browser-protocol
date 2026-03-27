@@ -328,6 +328,7 @@ class AbpController : public TabStripModelObserver {
   enum class InputMode {
     kAgent,
     kHuman,
+    kCdp,
   };
 
   // Saved per-tab execution state for mode switch restore.
@@ -350,6 +351,10 @@ class AbpController : public TabStripModelObserver {
   void GetInputModeResponse(ResponseCallback callback);
   void SetInputMode(const base::Value::Dict& params,
                     ResponseCallback callback);
+
+  // CDP mode: suspend ABP and start Chrome's remote debugging server
+  void EnterCdpMode(const base::Value::Dict& params, ResponseCallback callback);
+  void ExitCdpMode(ResponseCallback callback);
 
   // Install the input-mode overlay into the browser's view hierarchy.
   // Called once the browser window is ready.
@@ -1117,6 +1122,12 @@ class AbpController : public TabStripModelObserver {
   void AbortActiveAction(const std::string& tab_id);
   void SetAllowSystemInputsForAllTabs(bool allow);
 
+  // CDP mode helpers
+  int FindAvailableCdpPort(int start_port, int max_attempts);
+  void OnCdpModeTimeout();
+  void DetachAllCdpClients();
+  void ReattachAllCdpClients();
+
   // Dialog endpoint methods
   void GetDialog(const std::string& tab_id, ResponseCallback callback);
   void AcceptDialog(const std::string& tab_id,
@@ -1192,6 +1203,12 @@ class AbpController : public TabStripModelObserver {
   InputMode input_mode_ = InputMode::kAgent;
   std::map<std::string, SavedExecutionState> saved_execution_states_;
   base::ObserverList<InputModeObserver> input_mode_observers_;
+
+  // CDP mode state
+  int cdp_port_ = 0;                    // Active CDP server port (0 = not running)
+  std::string cdp_ws_url_;              // Full WebSocket URL for browser target
+  base::OneShotTimer cdp_timeout_timer_; // Auto-exit timer
+  base::TimeTicks cdp_timeout_deadline_; // For remaining_ms calculation
 
   // Input mode overlay installed in the browser view hierarchy.
   raw_ptr<AbpInputModeOverlay> input_mode_overlay_ = nullptr;
