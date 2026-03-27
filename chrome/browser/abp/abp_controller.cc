@@ -2330,6 +2330,17 @@ void AbpController::HandleRequest(const std::string& method,
       }
       return;
     }
+    if (segments.size() == 5 && segments[3] == "cdp-mode") {
+      const std::string& cdp_action = segments[4];
+      if (cdp_action == "enter" && method == "POST") {
+        EnterCdpMode(params, std::move(callback));
+      } else if (cdp_action == "exit" && method == "POST") {
+        ExitCdpMode(std::move(callback));
+      } else {
+        SendError(405, "Method not allowed", std::move(callback));
+      }
+      return;
+    }
   }
 
   // Route: /api/v1/file-chooser/{id}
