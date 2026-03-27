@@ -12,6 +12,7 @@ aggregate_vector_icons("chrome_vector_icons") {
 
   sources = [
     # go/keep-sorted start
+    "abp_cdp.icon",
     "abp_human.icon",
     "abp_robot.icon",
     "account_add_chrome_refresh.icon",

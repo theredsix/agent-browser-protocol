@@ -67,7 +67,13 @@ void AbpInputModeIconView::OnExecuting(ExecuteSource source) {
   // Read the controller's actual state to avoid any sync issues.
   abp::AbpController::InputMode actual_mode = controller->GetInputMode();
 
-  // Toggle mode.
+  if (actual_mode == abp::AbpController::InputMode::kCdp) {
+    controller->ExitCdpMode(
+        base::BindOnce([](int, const std::string&, std::string) {}));
+    return;
+  }
+
+  // Toggle between agent and human modes.
   base::Value::Dict params;
   if (actual_mode == abp::AbpController::InputMode::kAgent) {
     params.Set("input_mode", "human");
@@ -99,6 +105,18 @@ void AbpInputModeIconView::UpdateIconImage() {
     return;
   }
 
+  if (current_mode_ == abp::AbpController::InputMode::kCdp) {
+    const int icon_size = delegate()->GetPageActionIconSize();
+    constexpr SkColor kCdpModePurple = SkColorSetRGB(0x9B, 0x59, 0xB6);
+    const gfx::ImageSkia image =
+        gfx::CreateVectorIcon(kAbpCdpIcon, icon_size, kCdpModePurple);
+    if (!image.isNull()) {
+      SetImageModel(ui::ImageModel::FromImageSkia(image));
+    }
+    SchedulePaint();
+    return;
+  }
+
   // Agent mode: use the default icon rendering (theme-appropriate color).
   PageActionIconView::UpdateIconImage();
 }
@@ -106,6 +124,9 @@ void AbpInputModeIconView::UpdateIconImage() {
 const gfx::VectorIcon& AbpInputModeIconView::GetVectorIcon() const {
   if (current_mode_ == abp::AbpController::InputMode::kHuman) {
     return kAbpHumanIcon;
+  }
+  if (current_mode_ == abp::AbpController::InputMode::kCdp) {
+    return kAbpCdpIcon;
   }
   return kAbpRobotIcon;
 }
@@ -118,9 +139,13 @@ void AbpInputModeIconView::OnInputModeChanged(
   // ACTIVATED state from NotifyClick persists indefinitely.
   SetHighlighted(false);
   // Update tooltip to reflect current mode.
-  SetTooltipText(mode == abp::AbpController::InputMode::kHuman
-                     ? u"Switch to agent mode"
-                     : u"Switch to human mode");
+  if (mode == abp::AbpController::InputMode::kHuman) {
+    SetTooltipText(u"Switch to agent mode");
+  } else if (mode == abp::AbpController::InputMode::kCdp) {
+    SetTooltipText(u"Exit CDP mode");
+  } else {
+    SetTooltipText(u"Switch to human mode");
+  }
 }
 
 BEGIN_METADATA(AbpInputModeIconView)

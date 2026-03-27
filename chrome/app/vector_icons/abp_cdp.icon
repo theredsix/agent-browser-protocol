@@ -1,0 +1,26 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Plug/connection icon for ABP input mode toggle (CDP mode).
+// 24x24 canvas: plug symbol with two prongs and a rounded connector body.
+
+CANVAS_DIMENSIONS, 24,
+FILL_RULE_NONZERO,
+MOVE_TO, 15, 7,
+LINE_TO, 15, 3,
+LINE_TO, 13, 3,
+LINE_TO, 13, 7,
+R_H_LINE_TO, -2,
+V_LINE_TO, 3,
+LINE_TO, 9, 3,
+LINE_TO, 9, 7,
+LINE_TO, 7, 7,
+LINE_TO, 7, 13,
+ARC_TO, 4, 4, 0, 0, 0, 11, 17,
+V_LINE_TO, 21,
+LINE_TO, 13, 21,
+V_LINE_TO, 17,
+ARC_TO, 4, 4, 0, 0, 0, 17, 13,
+V_LINE_TO, 7,
+CLOSE
