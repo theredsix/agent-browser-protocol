@@ -56,6 +56,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/devtools_socket_factory.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
@@ -72,7 +73,12 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "skia/ext/image_operations.h"
+#include "net/base/ip_address.h"
+#include "net/base/ip_endpoint.h"
+#include "net/base/net_errors.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/log/net_log_source.h"
+#include "net/socket/tcp_server_socket.h"
 #include "ui/snapshot/snapshot.h"
 #include "url/gurl.h"
 
@@ -4978,6 +4984,19 @@ void AbpController::SetAllowSystemInputsForAllTabs(bool allow) {
       }
     }
   }
+}
+
+int AbpController::FindAvailableCdpPort(int start_port, int max_attempts) {
+  for (int i = 0; i < max_attempts; ++i) {
+    int port = start_port + i;
+    auto socket = std::make_unique<net::TCPServerSocket>(nullptr, net::NetLogSource());
+    net::IPEndPoint endpoint(net::IPAddress::IPv4Localhost(), port);
+    int rv = socket->Listen(endpoint, 1 /* backlog */, std::nullopt);
+    if (rv == net::OK) {
+      return port;
+    }
+  }
+  return -1;
 }
 
 void AbpController::GetExecutionState(const std::string& tab_id,
