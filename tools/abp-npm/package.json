@@ -1,6 +1,6 @@
 {
   "name": "agent-browser-protocol",
-  "version": "0.1.9",
+  "version": "0.1.20",
   "description": "Agent Browser Protocol - Deterministic AI agent browser control at the engine level",
   "type": "module",
   "exports": {
