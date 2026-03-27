@@ -1073,8 +1073,12 @@ void AbpController::GetBrowserStatus(ResponseCallback callback) {
           browser->tab_strip_model()->GetActiveWebContents();
       if (wc) {
         // Check if we can create/get a CDP client (indicates DevTools ready)
-        AbpCdpClient* client = GetOrCreateCdpClient(wc);
-        if (client) {
+        if (input_mode_ != InputMode::kCdp) {
+          AbpCdpClient* client = GetOrCreateCdpClient(wc);
+          if (client) {
+            has_devtools = true;
+          }
+        } else {
           has_devtools = true;
         }
       }
@@ -1092,9 +1096,25 @@ void AbpController::GetBrowserStatus(ResponseCallback callback) {
   base::Value::Dict data;
   data.Set("ready", ready);
   data.Set("state", ready ? "ready" : "initializing");
-  data.Set("input_mode",
-           input_mode_ == InputMode::kAgent ? "agent" : "human");
+  {
+    const char* mode_str = "agent";
+    if (input_mode_ == InputMode::kHuman) mode_str = "human";
+    else if (input_mode_ == InputMode::kCdp) mode_str = "cdp";
+    data.Set("input_mode", mode_str);
+  }
   data.Set("components", std::move(components));
+
+  if (input_mode_ == InputMode::kCdp && cdp_port_ > 0) {
+    base::Value::Dict cdp;
+    cdp.Set("port", cdp_port_);
+    cdp.Set("ws_url", cdp_ws_url_);
+    if (!cdp_timeout_deadline_.is_null()) {
+      int remaining_ms = static_cast<int>(
+          (cdp_timeout_deadline_ - base::TimeTicks::Now()).InMilliseconds());
+      cdp.Set("remaining_ms", std::max(0, remaining_ms));
+    }
+    data.Set("cdp", std::move(cdp));
+  }
 
   if (!ready) {
     if (!has_browser_window) {
@@ -4908,8 +4928,10 @@ void AbpController::RemoveInputModeObserver(InputModeObserver* observer) {
 
 void AbpController::GetInputModeResponse(ResponseCallback callback) {
   base::Value::Dict response;
-  response.Set("input_mode",
-               input_mode_ == InputMode::kAgent ? "agent" : "human");
+  const char* mode_str = "agent";
+  if (input_mode_ == InputMode::kHuman) mode_str = "human";
+  else if (input_mode_ == InputMode::kCdp) mode_str = "cdp";
+  response.Set("input_mode", mode_str);
   SendJson(200, base::Value(std::move(response)), std::move(callback));
 }
 
