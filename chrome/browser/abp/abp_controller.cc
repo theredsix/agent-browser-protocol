@@ -2053,13 +2053,26 @@ void AbpController::HandleRequest(const std::string& method,
 
   const std::string& resource = segments[2];
 
-  // Human mode blocking guard: reject agent-loop operations when in human mode
-  if (input_mode_ == InputMode::kHuman) {
+  // Human/CDP mode blocking guard: reject agent-loop operations when in human or CDP mode
+  if (input_mode_ == InputMode::kHuman || input_mode_ == InputMode::kCdp) {
     bool blocked = false;
     std::string block_message =
-        "Operation blocked: browser is in human input mode";
+        input_mode_ == InputMode::kCdp
+            ? "Operation blocked: browser is in cdp mode"
+            : "Operation blocked: browser is in human input mode";
 
     if (resource == "tabs") {
+      if (input_mode_ == InputMode::kCdp) {
+        if (segments.size() == 3 && method == "POST") {
+          blocked = true;  // POST /tabs (create)
+        }
+        if (segments.size() == 4 && method == "DELETE") {
+          blocked = true;  // DELETE /tabs/{id} (close)
+        }
+        if (segments.size() == 5 && segments[4] == "text" && method == "POST") {
+          blocked = true;  // POST /tabs/{id}/text
+        }
+      }
       if (segments.size() == 5) {
         const std::string& action = segments[4];
         // POST /tabs/{id}/execution — specific error message
@@ -2324,7 +2337,11 @@ void AbpController::HandleRequest(const std::string& method,
       if (method == "GET") {
         GetInputModeResponse(std::move(callback));
       } else if (method == "POST") {
-        SetInputMode(params, std::move(callback));
+        if (input_mode_ == InputMode::kCdp) {
+          SendError(409, "Operation blocked: browser is in cdp mode. Use POST /api/v1/browser/cdp-mode/exit to return to agent mode.", std::move(callback));
+        } else {
+          SetInputMode(params, std::move(callback));
+        }
       } else {
         SendError(405, "Method not allowed", std::move(callback));
       }
@@ -4898,6 +4915,10 @@ void AbpController::GetInputModeResponse(ResponseCallback callback) {
 
 void AbpController::SetInputMode(const base::Value::Dict& params,
                                  ResponseCallback callback) {
+  if (input_mode_ == InputMode::kCdp) {
+    SendError(409, "Cannot change input mode while in CDP mode. Exit CDP mode first.", std::move(callback));
+    return;
+  }
   const std::string* mode_str = params.FindString("input_mode");
   if (!mode_str) {
     SendError(400, "Missing 'input_mode' parameter", std::move(callback));
@@ -7019,8 +7040,9 @@ void AbpController::BinaryScreenshot(const std::string& tab_id,
   // Parse query params for markup tags.
   // New API: ?markup=clickable,grid — enable specific overlays (none by default).
   // Legacy: ?disable_markup=grid — all overlays minus disabled ones.
+  // In CDP mode, markup is skipped (CSS injection requires CDP clients which are detached).
   std::vector<std::string> markup_tags;
-  if (!query.empty()) {
+  if (!query.empty() && input_mode_ != InputMode::kCdp) {
     auto parse_csv = [](const std::string& q, const std::string& key)
         -> std::vector<std::string> {
       std::vector<std::string> result;
