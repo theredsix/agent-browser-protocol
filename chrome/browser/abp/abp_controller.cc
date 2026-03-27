@@ -38,7 +38,6 @@
 #include "base/time/time.h"
 #include "chrome/browser/abp/abp_curl_handler.h"
 #include "chrome/browser/abp/abp_download_observer.h"
-#include "chrome/browser/abp/abp_input_mode_overlay.h"
 #include "chrome/browser/abp/abp_event_collector.h"
 #include "chrome/browser/abp/abp_event_observer.h"
 #include "chrome/browser/abp/abp_history_controller.h"
@@ -1027,35 +1026,6 @@ bool AbpController::IsBrowserReady() {
   }
   VLOG(1) << "ABP DEBUG L1: IsBrowserReady - not ready yet";
   return false;
-}
-
-void AbpController::InstallOverlay() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  if (input_mode_overlay_) {
-    return;  // Already installed.
-  }
-
-  const BrowserList* browser_list = BrowserList::GetInstance();
-  for (auto it = browser_list->begin(); it != browser_list->end(); ++it) {
-    Browser* browser = *it;
-    BrowserView* browser_view =
-        BrowserView::GetBrowserViewForBrowser(browser);
-    if (!browser_view) {
-      continue;
-    }
-    ContentsContainerView* container =
-        browser_view->GetActiveContentsContainerView();
-    if (!container) {
-      continue;
-    }
-    auto overlay =
-        std::make_unique<AbpInputModeOverlay>(container->contents_view());
-    input_mode_overlay_ = container->AddChildView(std::move(overlay));
-    VLOG(1) << "ABP: Input mode overlay installed";
-    return;
-  }
-  VLOG(1) << "ABP: Could not find a suitable browser view for overlay";
 }
 
 void AbpController::GetBrowserStatus(ResponseCallback callback) {

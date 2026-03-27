@@ -30,8 +30,6 @@ source_set("abp") {
     "abp_input_dispatcher.h",
     "abp_input_mode_icon_view.cc",
     "abp_input_mode_icon_view.h",
-    "abp_input_mode_overlay.cc",
-    "abp_input_mode_overlay.h",
     "abp_location_provider.cc",
     "abp_location_provider.h",
     "abp_login_delegate.cc",

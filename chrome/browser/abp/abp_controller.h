@@ -58,8 +58,6 @@ class AbpPopupInterceptor;
 
 }  // namespace abp
 
-class AbpInputModeOverlay;
-
 namespace abp {
 
 // Key information for CDP Input.dispatchKeyEvent
@@ -355,10 +353,6 @@ class AbpController : public TabStripModelObserver {
   // CDP mode: suspend ABP and start Chrome's remote debugging server
   void EnterCdpMode(const base::Value::Dict& params, ResponseCallback callback);
   void ExitCdpMode(ResponseCallback callback);
-
-  // Install the input-mode overlay into the browser's view hierarchy.
-  // Called once the browser window is ready.
-  void InstallOverlay();
 
   // Check if browser is ready for ABP operations
   // Returns true if there's a browser window with a tab that has a valid view
@@ -1209,9 +1203,6 @@ class AbpController : public TabStripModelObserver {
   std::string cdp_ws_url_;              // Full WebSocket URL for browser target
   base::OneShotTimer cdp_timeout_timer_; // Auto-exit timer
   base::TimeTicks cdp_timeout_deadline_; // For remaining_ms calculation
-
-  // Input mode overlay installed in the browser view hierarchy.
-  raw_ptr<AbpInputModeOverlay> input_mode_overlay_ = nullptr;
 
   base::WeakPtrFactory<AbpController> weak_factory_{this};
 };

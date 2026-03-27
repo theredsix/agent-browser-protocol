@@ -200,7 +200,6 @@ void AbpHttpServer::PollForReadyAndCenterCursor() {
   if (controller_->IsBrowserReady()) {
     VLOG(1) << "ABP: Browser ready, centering cursor";
     cursor_centered_ = true;
-    controller_->InstallOverlay();
     std::string tab_id = controller_->GetActiveTabId();
     if (!tab_id.empty()) {
       controller_->CenterCursorInTab(tab_id, base::DoNothing());
