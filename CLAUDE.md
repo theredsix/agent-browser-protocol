@@ -19,10 +19,10 @@ A Chromium fork implementing the Agent Browser Protocol (ABP) - a REST-based API
 - **Execution Control**: Pause/resume JS execution with virtual time for deterministic state
 - **Wait**: Duration-based wait with action envelope
 - **History**: Session, action, and event history with SQLite storage
-- **Input Mode**: Toggle between agent (ABP-controlled) and human (user-controlled) input modes via API or toolbar icon. Human mode allows direct user interaction (e.g., for authentication), suspends execution control, and shows a yellow gradient border overlay.
+- **Input Mode**: Toggle between agent (ABP-controlled), human (user-controlled), and cdp (remote debugging) input modes via API or toolbar icon. Human mode allows direct user interaction (e.g., for authentication), suspends execution control, and shows a yellow gradient border overlay.
 - **Browser Management**: Status check, graceful shutdown
 - **Console Capture**: In-memory 5000-entry FIFO buffer capturing console.log/warn/error, CORS errors, CSP violations, uncaught exceptions via WebContentsObserver (non-fingerprintable, no CDP)
-- **MCP Server**: Embedded MCP (JSON-RPC over HTTP) with 19 tools at `/mcp`
+- **MCP Server**: Embedded MCP (JSON-RPC over HTTP) with 20 tools at `/mcp`
 
 ### Architecture
 
@@ -262,6 +262,8 @@ See `plans/API.md` for the complete REST API specification. All endpoints:
 | POST | `/api/v1/browser/shutdown` | Graceful shutdown |
 | GET | `/api/v1/browser/input-mode` | Get current input mode (agent/human) |
 | POST | `/api/v1/browser/input-mode` | Set input mode (toggles human/agent control) |
+| POST | `/api/v1/browser/cdp-mode/enter` | Enter CDP mode (starts remote debugging server) |
+| POST | `/api/v1/browser/cdp-mode/exit` | Exit CDP mode (returns control to ABP) |
 | **Tabs** | | |
 | GET | `/api/v1/tabs` | List all tabs |
 | GET | `/api/v1/tabs/{id}` | Get tab details |
@@ -332,7 +334,7 @@ See `plans/API.md` for the complete REST API specification. All endpoints:
 | DELETE | `/api/v1/history/events` | Delete events |
 | DELETE | `/api/v1/history` | Delete all history |
 | **MCP** | | |
-| POST | `/mcp` | MCP JSON-RPC endpoint (19 tools) |
+| POST | `/mcp` | MCP JSON-RPC endpoint (20 tools, includes `cdp_mode`) |
 
 ## Development Notes
 
