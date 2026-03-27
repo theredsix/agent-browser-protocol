@@ -5049,9 +5049,9 @@ void AbpController::EnterCdpMode(const base::Value::Dict& params,
       content::DevToolsAgentHost::RemoteDebuggingServerMode::kDefault);
 
   cdp_port_ = port;
-  std::string address =
-      content::DevToolsAgentHost::GetRemoteDebuggingServerAddress();
-  cdp_ws_url_ = "ws://" + address + "/devtools/browser";
+  // Construct ws_url directly — GetRemoteDebuggingServerAddress() returns empty
+  // because the server starts asynchronously on another thread.
+  cdp_ws_url_ = "ws://localhost:" + std::to_string(port) + "/devtools/browser";
 
   // Optional auto-exit timeout.
   std::optional<int> timeout_ms = params.FindInt("timeout_ms");
