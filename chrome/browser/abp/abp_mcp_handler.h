@@ -115,6 +115,9 @@ class AbpMcpHandler {
   void CallBrowserConsole(const base::Value::Dict& args,
                           base::Value request_id,
                           ResponseWithHeadersCallback callback);
+  void CallCdpMode(const base::Value::Dict& args,
+                   base::Value request_id,
+                   ResponseWithHeadersCallback callback);
 
   // Callback for browser_curl binary (image) responses.
   void OnCurlControllerResponse(base::Value request_id,

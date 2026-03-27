@@ -554,6 +554,22 @@ base::Value::List GetToolDefinitions() {
                    .Description("Get browser status and readiness")
                    .Build());
 
+  // cdp_mode
+  tools.Append(
+      ToolBuilder("cdp_mode")
+          .Description(
+              "Enter or exit CDP mode for external browser control via Chrome "
+              "DevTools Protocol. Enter suspends ABP and starts a CDP WebSocket "
+              "server. Exit stops the server and returns control to ABP.")
+          .RequiredStringEnum("action",
+                              "Enter or exit CDP mode",
+                              {"enter", "exit"})
+          .OptionalNumber("port",
+                          "CDP server port (default: auto-select starting at 24578)")
+          .OptionalNumber("timeout_ms",
+                          "Auto-exit timeout in milliseconds (no timeout if omitted)")
+          .Build());
+
   // 14. browser_shutdown
   tools.Append(ToolBuilder("browser_shutdown")
                    .Description("Gracefully shut down the browser")
@@ -1039,20 +1055,36 @@ void AbpMcpHandler::HandleToolsCall(const base::Value::Dict& params,
     args = &empty_args;
   }
 
-  // Block most tools in human input mode — only allow read-only observation
-  if (controller_->GetInputMode() == AbpController::InputMode::kHuman &&
-      *name != "browser_get_status" && *name != "browser_screenshot" &&
-      *name != "browser_text" && *name != "browser_tabs" &&
-      *name != "browser_console") {
+  // Block most tools in human or CDP mode — only allow read-only observation
+  bool is_suspended_mode =
+      controller_->GetInputMode() == AbpController::InputMode::kHuman ||
+      controller_->GetInputMode() == AbpController::InputMode::kCdp;
+  bool is_cdp_mode =
+      controller_->GetInputMode() == AbpController::InputMode::kCdp;
+
+  // Always allowed: status, screenshot, tabs, console, cdp_mode
+  bool is_always_allowed =
+      *name == "browser_get_status" || *name == "browser_screenshot" ||
+      *name == "browser_tabs" || *name == "browser_console" ||
+      *name == "cdp_mode";
+  // Allowed in human mode only (not CDP mode): browser_text
+  bool is_human_only_allowed =
+      !is_cdp_mode && *name == "browser_text";
+
+  if (is_suspended_mode && !is_always_allowed && !is_human_only_allowed) {
+    std::string error_msg = is_cdp_mode
+        ? "Operation blocked: browser is in cdp mode. "
+          "Use browser_get_status to check current input_mode, or use "
+          "cdp_mode with action 'exit' to return control to ABP."
+        : "Operation blocked: browser is in human input mode. "
+          "Use browser_get_status to check current input_mode, or set "
+          "input_mode to 'agent' to switch back via "
+          "POST /api/v1/browser/input-mode";
     base::Value::Dict result;
     base::Value::List content;
     base::Value::Dict text_block;
     text_block.Set("type", "text");
-    text_block.Set("text",
-        "Operation blocked: browser is in human input mode. "
-        "Use browser_get_status to check current input_mode, or set "
-        "input_mode to 'agent' to switch back via "
-        "POST /api/v1/browser/input-mode");
+    text_block.Set("text", error_msg);
     content.Append(std::move(text_block));
     result.Set("content", std::move(content));
     result.Set("isError", true);
@@ -1086,6 +1118,8 @@ void AbpMcpHandler::HandleToolsCall(const base::Value::Dict& params,
     CallBrowserSelectPicker(*args, std::move(request_id), std::move(callback));
   } else if (*name == "browser_get_status") {
     CallBrowserGetStatus(*args, std::move(request_id), std::move(callback));
+  } else if (*name == "cdp_mode") {
+    CallCdpMode(*args, std::move(request_id), std::move(callback));
   } else if (*name == "browser_shutdown") {
     CallBrowserShutdown(*args, std::move(request_id), std::move(callback));
   } else if (*name == "browser_slider") {
@@ -2442,6 +2476,39 @@ void AbpMcpHandler::CallRespondToPermission(
       base::BindOnce(&AbpMcpHandler::OnControllerResponse,
                      weak_factory_.GetWeakPtr(), std::move(request_id),
                      std::move(callback)));
+}
+
+// --- cdp_mode ---
+void AbpMcpHandler::CallCdpMode(const base::Value::Dict& args,
+                                 base::Value request_id,
+                                 ResponseWithHeadersCallback callback) {
+  const std::string* action = args.FindString("action");
+  if (!action) {
+    SendJsonRpcError(std::move(request_id), kInvalidParams,
+                     "Missing required parameter: action",
+                     std::move(callback));
+    return;
+  }
+
+  if (*action == "enter") {
+    std::string body;
+    base::JSONWriter::Write(base::Value(args.Clone()), &body);
+    controller_->HandleRequest(
+        "POST", "/api/v1/browser/cdp-mode/enter", body,
+        base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                       weak_factory_.GetWeakPtr(), std::move(request_id),
+                       std::move(callback)));
+  } else if (*action == "exit") {
+    controller_->HandleRequest(
+        "POST", "/api/v1/browser/cdp-mode/exit", "",
+        base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                       weak_factory_.GetWeakPtr(), std::move(request_id),
+                       std::move(callback)));
+  } else {
+    SendJsonRpcError(std::move(request_id), kInvalidParams,
+                     "Invalid action: must be 'enter' or 'exit'",
+                     std::move(callback));
+  }
 }
 
 }  // namespace abp
