@@ -29,6 +29,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/synchronization/lock.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -662,23 +663,58 @@ std::optional<std::string> NormalizeKey(const std::string& input) {
   return std::nullopt;
 }
 
+// Thread-safe storage for the actual bound address from the CDP server's
+// handler thread, readable by the UI thread. Defined in abp namespace
+// (not anonymous) so the header's forward declaration resolves correctly.
+struct CdpBoundEndpoint {
+  base::Lock lock;
+  std::string address;  // e.g. "127.0.0.1" or "::1"
+  int port = 0;
+
+  void Set(const std::string& addr, int p) {
+    base::AutoLock l(lock);
+    address = addr;
+    port = p;
+  }
+
+  std::string GetAddress() {
+    base::AutoLock l(lock);
+    return address;
+  }
+
+  int GetPort() {
+    base::AutoLock l(lock);
+    return port;
+  }
+};
+
 namespace {
 
 // Socket factory for CDP remote debugging server.
 // Creates a TCP server socket bound to localhost on the specified port.
+// Writes the actual bound address to shared CdpBoundEndpoint so the UI
+// thread can construct accurate WebSocket URLs.
 class AbpCdpSocketFactory : public content::DevToolsSocketFactory {
  public:
-  explicit AbpCdpSocketFactory(int port) : port_(port) {}
+  AbpCdpSocketFactory(int port,
+                      std::shared_ptr<CdpBoundEndpoint> bound_endpoint)
+      : port_(port), bound_endpoint_(std::move(bound_endpoint)) {}
 
   std::unique_ptr<net::ServerSocket> CreateForHttpServer() override {
     auto socket = std::make_unique<net::TCPServerSocket>(nullptr, net::NetLogSource());
     net::IPEndPoint endpoint(net::IPAddress::IPv4Localhost(), port_);
     if (socket->Listen(endpoint, 10, std::nullopt) == net::OK) {
+      net::IPEndPoint local_addr;
+      socket->GetLocalAddress(&local_addr);
+      bound_endpoint_->Set(local_addr.address().ToString(), local_addr.port());
       return socket;
     }
     socket = std::make_unique<net::TCPServerSocket>(nullptr, net::NetLogSource());
     net::IPEndPoint endpoint6(net::IPAddress::IPv6Localhost(), port_);
     if (socket->Listen(endpoint6, 10, std::nullopt) == net::OK) {
+      net::IPEndPoint local_addr;
+      socket->GetLocalAddress(&local_addr);
+      bound_endpoint_->Set(local_addr.address().ToString(), local_addr.port());
       return socket;
     }
     return nullptr;
@@ -691,6 +727,7 @@ class AbpCdpSocketFactory : public content::DevToolsSocketFactory {
 
  private:
   int port_;
+  std::shared_ptr<CdpBoundEndpoint> bound_endpoint_;
 };
 
 }  // namespace
@@ -1076,7 +1113,24 @@ void AbpController::GetBrowserStatus(ResponseCallback callback) {
 
   if (input_mode_ == InputMode::kCdp && cdp_port_ > 0) {
     base::Value::Dict cdp;
-    cdp.Set("port", cdp_port_);
+    // Read actual bound address from shared endpoint (set by handler thread).
+    // Falls back to the pre-test address if the server hasn't bound yet.
+    std::string addr = cdp_bound_address_;
+    int port = cdp_port_;
+    if (cdp_bound_endpoint_) {
+      std::string actual_addr = cdp_bound_endpoint_->GetAddress();
+      int actual_port = cdp_bound_endpoint_->GetPort();
+      if (!actual_addr.empty()) {
+        addr = actual_addr;
+        port = actual_port;
+        // Format IPv6 with brackets for URL.
+        std::string url_host = addr.find(':') != std::string::npos
+            ? "[" + addr + "]" : addr;
+        cdp_ws_url_ = "ws://" + url_host + ":" + std::to_string(port) + "/devtools/browser";
+      }
+    }
+    cdp.Set("port", port);
+    cdp.Set("address", addr);
     cdp.Set("ws_url", cdp_ws_url_);
     if (!cdp_timeout_deadline_.is_null()) {
       int remaining_ms = static_cast<int>(
@@ -5043,13 +5097,18 @@ void AbpController::EnterCdpMode(const base::Value::Dict& params,
   DetachAllCdpClients();
 
   // Start Chrome's remote debugging server on the selected port.
+  // The socket factory writes the actual bound address to cdp_bound_endpoint_
+  // from the handler thread so we can construct an accurate ws_url.
+  cdp_bound_endpoint_ = std::make_shared<CdpBoundEndpoint>();
   content::DevToolsAgentHost::StartRemoteDebuggingServer(
-      std::make_unique<AbpCdpSocketFactory>(port),
+      std::make_unique<AbpCdpSocketFactory>(port, cdp_bound_endpoint_),
       base::FilePath(), base::FilePath(),
       content::DevToolsAgentHost::RemoteDebuggingServerMode::kDefault);
 
   cdp_port_ = port;
-  // Use the bound address from FindAvailableCdpPort (127.0.0.1 or [::1]).
+  // Initial ws_url uses the address from the pre-test bind probe.
+  // GetBrowserStatus will read the actual bound address from cdp_bound_endpoint_
+  // once the server has started on the handler thread.
   cdp_ws_url_ = "ws://" + cdp_bound_address_ + ":" + std::to_string(port) + "/devtools/browser";
 
   // Optional auto-exit timeout.
@@ -5102,6 +5161,8 @@ void AbpController::ExitCdpMode(ResponseCallback callback) {
   content::DevToolsAgentHost::StopRemoteDebuggingServer();
   cdp_port_ = 0;
   cdp_ws_url_.clear();
+  cdp_bound_address_.clear();
+  cdp_bound_endpoint_.reset();
 
   // Cancel auto-exit timeout.
   cdp_timeout_timer_.Stop();
