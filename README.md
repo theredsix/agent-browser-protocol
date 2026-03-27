@@ -4,6 +4,15 @@
 
 <p align="center"><strong>90.53% on Online Mind2Web</strong> — <a href="https://github.com/theredsix/abp-online-mind2web-results">reproducible results</a></p>
 
+---
+
+- **2x lower token usage**
+- **2x faster automation runs**
+- **2x lower tool calls**
+
+_*compared to Playwright MCP_
+
+---
 
 ABP is a Chromium fork with **MCP + REST** baked directly into the browser engine.
 
