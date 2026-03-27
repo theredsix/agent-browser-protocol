@@ -665,6 +665,39 @@ std::optional<std::string> NormalizeKey(const std::string& input) {
 
 namespace {
 
+// Socket factory for CDP remote debugging server.
+// Creates a TCP server socket bound to localhost on the specified port.
+class AbpCdpSocketFactory : public content::DevToolsSocketFactory {
+ public:
+  explicit AbpCdpSocketFactory(int port) : port_(port) {}
+
+  std::unique_ptr<net::ServerSocket> CreateForHttpServer() override {
+    auto socket = std::make_unique<net::TCPServerSocket>(nullptr, net::NetLogSource());
+    net::IPEndPoint endpoint(net::IPAddress::IPv4Localhost(), port_);
+    if (socket->Listen(endpoint, 10, std::nullopt) == net::OK) {
+      return socket;
+    }
+    socket = std::make_unique<net::TCPServerSocket>(nullptr, net::NetLogSource());
+    net::IPEndPoint endpoint6(net::IPAddress::IPv6Localhost(), port_);
+    if (socket->Listen(endpoint6, 10, std::nullopt) == net::OK) {
+      return socket;
+    }
+    return nullptr;
+  }
+
+  std::unique_ptr<net::ServerSocket> CreateForTethering(
+      std::string* out_name) override {
+    return nullptr;
+  }
+
+ private:
+  int port_;
+};
+
+}  // namespace
+
+namespace {
+
 bool IsValidMarkupTag(const std::string& tag) {
   return tag == "clickable" || tag == "typeable" ||
          tag == "scrollable" || tag == "grid" || tag == "selected";
