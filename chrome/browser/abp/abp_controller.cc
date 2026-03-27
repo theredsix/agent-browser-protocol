@@ -3560,6 +3560,10 @@ content::WebContents* AbpController::FindWebContents(
 }
 
 AbpCdpClient* AbpController::GetOrCreateCdpClient(content::WebContents* wc) {
+  if (input_mode_ == InputMode::kCdp) {
+    return nullptr;
+  }
+
   auto host = content::DevToolsAgentHost::GetOrCreateFor(wc);
   const std::string& id = host->GetId();
 
@@ -4997,6 +5001,54 @@ int AbpController::FindAvailableCdpPort(int start_port, int max_attempts) {
     }
   }
   return -1;
+}
+
+void AbpController::DetachAllCdpClients() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  for (auto& [tab_id, state] : tab_states_) {
+    state.cdp_client.reset();
+  }
+  if (event_observer_) {
+    for (auto& [tab_id, state] : tab_states_) {
+      event_observer_->DetachTab(tab_id);
+    }
+  }
+}
+
+void AbpController::ReattachAllCdpClients() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (event_observer_) {
+    event_observer_->Stop();
+    event_observer_->Start();
+  }
+  std::set<std::string> live_tab_ids;
+  const BrowserList* browser_list = BrowserList::GetInstance();
+  for (auto it = browser_list->begin(); it != browser_list->end(); ++it) {
+    Browser* browser = *it;
+    TabStripModel* tab_strip = browser->tab_strip_model();
+    for (int i = 0; i < tab_strip->count(); ++i) {
+      content::WebContents* wc = tab_strip->GetWebContentsAt(i);
+      if (!wc) continue;
+      auto host = content::DevToolsAgentHost::GetOrCreateFor(wc);
+      const std::string& tab_id = host->GetId();
+      live_tab_ids.insert(tab_id);
+      GetOrCreateCdpClient(wc);
+      if (!tab_states_.count(tab_id) || !tab_states_[tab_id].execution.IsEnabled()) {
+        if (IsExecutionControlEnabled()) {
+          EnableExecutionControl(tab_id, std::nullopt, base::DoNothing());
+        }
+      }
+    }
+  }
+  std::vector<std::string> stale_ids;
+  for (auto& [tab_id, state] : tab_states_) {
+    if (!live_tab_ids.contains(tab_id)) {
+      stale_ids.push_back(tab_id);
+    }
+  }
+  for (const auto& tab_id : stale_ids) {
+    tab_states_.erase(tab_id);
+  }
 }
 
 void AbpController::GetExecutionState(const std::string& tab_id,
