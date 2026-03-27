@@ -4973,6 +4973,100 @@ void AbpController::SwitchToAgentMode(ResponseCallback callback) {
   GetInputModeResponse(std::move(callback));
 }
 
+void AbpController::EnterCdpMode(const base::Value::Dict& params,
+                                  ResponseCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (input_mode_ == InputMode::kCdp) {
+    SendError(409, "already in cdp mode", std::move(callback));
+    return;
+  }
+
+  int requested_port = params.FindInt("port").value_or(0);
+  int port;
+  if (requested_port > 0) {
+    port = FindAvailableCdpPort(requested_port, 1);
+  } else {
+    port = FindAvailableCdpPort(24578, 100);
+  }
+  if (port < 0) {
+    SendError(503, "no available port", std::move(callback));
+    return;
+  }
+
+  // Suspend ABP: abort actions, save execution state, resume paused tabs.
+  if (input_mode_ == InputMode::kAgent) {
+    for (auto& [tab_id, state] : tab_states_) {
+      AbortActiveAction(tab_id);
+    }
+    saved_execution_states_.clear();
+    for (auto& [tab_id, state] : tab_states_) {
+      if (state.execution.IsEnabled()) {
+        SavedExecutionState saved;
+        saved.was_enabled = true;
+        saved.was_paused = state.execution.IsPaused();
+        saved.virtual_time_base_ms = state.execution.virtual_time_base_ticks_ms;
+        saved_execution_states_[tab_id] = saved;
+        if (state.execution.IsPaused()) {
+          ResumeExecution(tab_id, base::DoNothing());
+        }
+      }
+    }
+    SetAllowSystemInputsForAllTabs(true);
+  }
+
+  // Detach all ABP CDP clients so the remote debugging server can attach.
+  DetachAllCdpClients();
+
+  // Start Chrome's remote debugging server on the selected port.
+  content::DevToolsAgentHost::StartRemoteDebuggingServer(
+      std::make_unique<AbpCdpSocketFactory>(port),
+      base::FilePath(), base::FilePath(),
+      content::DevToolsAgentHost::RemoteDebuggingServerMode::kDefault);
+
+  cdp_port_ = port;
+  std::string address =
+      content::DevToolsAgentHost::GetRemoteDebuggingServerAddress();
+  cdp_ws_url_ = "ws://" + address + "/devtools/browser";
+
+  // Optional auto-exit timeout.
+  std::optional<int> timeout_ms = params.FindInt("timeout_ms");
+  if (timeout_ms.has_value() && *timeout_ms > 0) {
+    cdp_timeout_deadline_ =
+        base::TimeTicks::Now() + base::Milliseconds(*timeout_ms);
+    cdp_timeout_timer_.Start(
+        FROM_HERE, base::Milliseconds(*timeout_ms),
+        base::BindOnce(&AbpController::OnCdpModeTimeout,
+                        base::Unretained(this)));
+  } else {
+    cdp_timeout_deadline_ = base::TimeTicks();
+  }
+
+  input_mode_ = InputMode::kCdp;
+  for (auto& observer : input_mode_observers_) {
+    observer.OnInputModeChanged(InputMode::kCdp);
+  }
+
+  base::Value::Dict response;
+  response.Set("status", "ok");
+  response.Set("port", cdp_port_);
+  response.Set("ws_url", cdp_ws_url_);
+  if (timeout_ms.has_value() && *timeout_ms > 0) {
+    response.Set("timeout_ms", *timeout_ms);
+  }
+  SendJson(200, base::Value(std::move(response)), std::move(callback));
+}
+
+void AbpController::OnCdpModeTimeout() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (input_mode_ != InputMode::kCdp) {
+    return;
+  }
+  VLOG(1) << "ABP: CDP mode timeout — auto-exiting";
+  ExitCdpMode(
+      base::BindOnce([](int, const std::string&, std::string) {}));
+}
+
 void AbpController::AbortActiveAction(const std::string& tab_id) {
   auto it = tab_states_.find(tab_id);
   if (it == tab_states_.end()) {
