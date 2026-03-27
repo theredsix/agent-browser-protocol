@@ -5067,6 +5067,53 @@ void AbpController::OnCdpModeTimeout() {
       base::BindOnce([](int, const std::string&, std::string) {}));
 }
 
+void AbpController::ExitCdpMode(ResponseCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (input_mode_ != InputMode::kCdp) {
+    SendError(409, "not in cdp mode", std::move(callback));
+    return;
+  }
+
+  // Stop Chrome's remote debugging server.
+  content::DevToolsAgentHost::StopRemoteDebuggingServer();
+  cdp_port_ = 0;
+  cdp_ws_url_.clear();
+
+  // Cancel auto-exit timeout.
+  cdp_timeout_timer_.Stop();
+  cdp_timeout_deadline_ = base::TimeTicks();
+
+  // Set to kAgent before re-attach so GetOrCreateCdpClient guard allows it.
+  input_mode_ = InputMode::kAgent;
+
+  // Re-attach ABP CDP clients to all live tabs.
+  ReattachAllCdpClients();
+
+  // Block system inputs again (ABP-controlled mode).
+  SetAllowSystemInputsForAllTabs(false);
+
+  // Restore saved execution state — re-pause tabs that were paused.
+  for (auto& [tab_id, saved] : saved_execution_states_) {
+    if (saved.was_enabled && saved.was_paused) {
+      auto it = tab_states_.find(tab_id);
+      if (it != tab_states_.end() && it->second.execution.IsEnabled()) {
+        PauseExecution(tab_id, base::DoNothing());
+      }
+    }
+  }
+  saved_execution_states_.clear();
+
+  // Notify observers of mode change.
+  for (auto& observer : input_mode_observers_) {
+    observer.OnInputModeChanged(InputMode::kAgent);
+  }
+
+  base::Value::Dict response;
+  response.Set("status", "ok");
+  SendJson(200, base::Value(std::move(response)), std::move(callback));
+}
+
 void AbpController::AbortActiveAction(const std::string& tab_id) {
   auto it = tab_states_.find(tab_id);
   if (it == tab_states_.end()) {
