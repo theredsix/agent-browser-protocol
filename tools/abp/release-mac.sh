@@ -21,118 +21,49 @@ if [[ -z "${ABP_VERSION:-}" ]]; then
     fi
 fi
 
-BUILD_ARCH="${BUILD_ARCH:-all}"
-
-release_arch() {
-    local arch=$1
-    local build_dir="$CHROMIUM_SRC/out/Release-$arch"
-
-    echo ""
-    echo "============================================"
-    echo "ABP Chrome Release - macOS $arch"
-    echo "============================================"
-
-    # Build
-    echo ""
-    echo ">>> Building $arch..."
-    BUILD_ARCH="$arch" "$SCRIPT_DIR/build-mac.sh"
-
-    # Validate
-    if [[ "${SKIP_VALIDATION:-}" == "1" ]]; then
-        echo ""
-        echo ">>> Validation SKIPPED (SKIP_VALIDATION=1)"
-    else
-        echo ""
-        echo ">>> Validating $arch..."
-        local chrome_bin="$build_dir/ABP.app/Contents/MacOS/ABP"
-        if ! "$SCRIPT_DIR/common/validate.sh" "$chrome_bin"; then
-            echo "ERROR: Validation failed for $arch"
-            exit 3
-        fi
-    fi
-
-    # Sign + Notarize
-    if [[ "${SKIP_SIGNING:-}" == "1" ]]; then
-        echo ""
-        echo ">>> Signing SKIPPED (SKIP_SIGNING=1)"
-    else
-        echo ""
-        "$SCRIPT_DIR/sign-mac.sh" "$build_dir"
-    fi
-
-    # Package (after notarization so the stapled ticket is included in the zip)
-    echo ""
-    echo ">>> Packaging $arch..."
-    BUILD_ARCH="$arch" "$SCRIPT_DIR/package-mac.sh"
-}
+BUILD_DIR="$CHROMIUM_SRC/out/Release"
 
 echo "============================================"
 echo "ABP Chrome Release - macOS"
 echo "============================================"
 echo "ABP Version: $ABP_VERSION"
-echo "Architecture(s): $BUILD_ARCH"
 echo "============================================"
 
-case "$BUILD_ARCH" in
-    arm64)
-        release_arch "arm64"
-        ;;
-    x64)
-        release_arch "x64"
-        ;;
-    universal)
-        release_arch "universal"
-        ;;
-    all)
-        # Build all architectures (arm64 + x64 + merge into universal)
-        BUILD_ARCH="all" "$SCRIPT_DIR/build-mac.sh"
+# Build
+echo ""
+echo ">>> Building..."
+"$SCRIPT_DIR/build-mac.sh"
 
-        # Validate, sign, notarize, and package each output
-        for arch in arm64 universal; do
-            local_build_dir="$CHROMIUM_SRC/out/Release-$arch"
+# Validate
+if [[ "${SKIP_VALIDATION:-}" == "1" ]]; then
+    echo ""
+    echo ">>> Validation SKIPPED (SKIP_VALIDATION=1)"
+else
+    echo ""
+    echo ">>> Validating..."
+    chrome_bin="$BUILD_DIR/ABP.app/Contents/MacOS/ABP"
+    if ! "$SCRIPT_DIR/common/validate.sh" "$chrome_bin"; then
+        echo "ERROR: Validation failed"
+        exit 3
+    fi
+fi
 
-            echo ""
-            echo "============================================"
-            echo "ABP Chrome Release - macOS $arch"
-            echo "============================================"
+# Sign + Notarize
+if [[ "${SKIP_SIGNING:-}" == "1" ]]; then
+    echo ""
+    echo ">>> Signing SKIPPED (SKIP_SIGNING=1)"
+else
+    echo ""
+    "$SCRIPT_DIR/sign-mac.sh" "$BUILD_DIR"
+fi
 
-            # Validate
-            if [[ "${SKIP_VALIDATION:-}" == "1" ]]; then
-                echo ""
-                echo ">>> Validation SKIPPED (SKIP_VALIDATION=1)"
-            else
-                echo ""
-                echo ">>> Validating $arch..."
-                chrome_bin="$local_build_dir/ABP.app/Contents/MacOS/ABP"
-                if ! "$SCRIPT_DIR/common/validate.sh" "$chrome_bin"; then
-                    echo "ERROR: Validation failed for $arch"
-                    exit 3
-                fi
-            fi
-
-            # Sign + Notarize
-            if [[ "${SKIP_SIGNING:-}" == "1" ]]; then
-                echo ""
-                echo ">>> Signing SKIPPED (SKIP_SIGNING=1)"
-            else
-                echo ""
-                "$SCRIPT_DIR/sign-mac.sh" "$local_build_dir"
-            fi
-
-            # Package (after notarization so stapled ticket is included)
-            echo ""
-            echo ">>> Packaging $arch..."
-            BUILD_ARCH="$arch" "$SCRIPT_DIR/package-mac.sh"
-        done
-        ;;
-    *)
-        echo "ERROR: Invalid BUILD_ARCH: $BUILD_ARCH"
-        exit 1
-        ;;
-esac
+# Package (after notarization so the stapled ticket is included in the zip)
+echo ""
+echo ">>> Packaging..."
+"$SCRIPT_DIR/package-mac.sh"
 
 echo ""
 echo "============================================"
-echo "All macOS releases complete!"
+echo "macOS release complete!"
 echo "Archives in: $CHROMIUM_SRC/dist/"
 echo "============================================"

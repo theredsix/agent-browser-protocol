@@ -21,60 +21,40 @@ if [[ -z "${ABP_VERSION:-}" ]]; then
     fi
 fi
 
-BUILD_ARCH="${BUILD_ARCH:-all}"
+BUILD_DIR="$CHROMIUM_SRC/out/Release"
 DIST_DIR="$CHROMIUM_SRC/dist"
 
-package_arch() {
-    local arch=$1
-    local build_dir="$CHROMIUM_SRC/out/Release-$arch"
-    local archive_name="abp-${ABP_VERSION}-mac-${arch}.zip"
-
-    # Validate build exists
-    if [[ ! -d "$build_dir/ABP.app" ]]; then
-        echo "ERROR: ABP.app not found at $build_dir/ABP.app"
-        echo "Run build-mac.sh with BUILD_ARCH=$arch first"
-        return 1
-    fi
-
-    echo "=== Packaging ABP Chrome for macOS ($arch) ==="
-    echo "ABP Version: $ABP_VERSION"
-    echo "Build: $build_dir"
-    echo "Output: $DIST_DIR/$archive_name"
-
-    # Create dist directory
-    mkdir -p "$DIST_DIR"
-
-    # Create archive (zip preserves macOS app bundle structure)
-    echo "=== Creating archive ==="
-    cd "$build_dir"
-    zip -r -y -q "$DIST_DIR/$archive_name" "ABP.app"
-
-    # Report results
-    SIZE=$(du -h "$DIST_DIR/$archive_name" | cut -f1)
-    echo "=== Package complete for $arch ==="
-    echo "Archive: $DIST_DIR/$archive_name"
-    echo "Size: $SIZE"
-}
-
-case "$BUILD_ARCH" in
-    arm64)
-        package_arch "arm64"
-        ;;
-    x64)
-        package_arch "x64"
-        ;;
-    universal)
-        package_arch "universal"
-        ;;
-    all)
-        package_arch "arm64"
-        package_arch "universal"
-        ;;
-    *)
-        echo "ERROR: Invalid BUILD_ARCH: $BUILD_ARCH"
-        echo "Valid values: arm64, x64, universal, all"
-        exit 1
-        ;;
+# Detect native architecture
+case "$(uname -m)" in
+    arm64)  ARCH="arm64" ;;
+    x86_64) ARCH="x64" ;;
+    *)      echo "ERROR: Unsupported architecture: $(uname -m)"; exit 1 ;;
 esac
 
-echo "=== All macOS packages complete ==="
+ARCHIVE_NAME="abp-${ABP_VERSION}-mac-${ARCH}.zip"
+
+# Validate build exists
+if [[ ! -d "$BUILD_DIR/ABP.app" ]]; then
+    echo "ERROR: ABP.app not found at $BUILD_DIR/ABP.app"
+    echo "Run build-mac.sh first"
+    exit 1
+fi
+
+echo "=== Packaging ABP Chrome for macOS ($ARCH) ==="
+echo "ABP Version: $ABP_VERSION"
+echo "Build: $BUILD_DIR"
+echo "Output: $DIST_DIR/$ARCHIVE_NAME"
+
+# Create dist directory
+mkdir -p "$DIST_DIR"
+
+# Create archive (zip preserves macOS app bundle structure)
+echo "=== Creating archive ==="
+cd "$BUILD_DIR"
+zip -r -y -q "$DIST_DIR/$ARCHIVE_NAME" "ABP.app"
+
+# Report results
+SIZE=$(du -h "$DIST_DIR/$ARCHIVE_NAME" | cut -f1)
+echo "=== Package complete ==="
+echo "Archive: $DIST_DIR/$ARCHIVE_NAME"
+echo "Size: $SIZE"
