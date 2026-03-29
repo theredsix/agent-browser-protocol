@@ -82,4 +82,25 @@ export type {
   Session,
   HistoryAction,
   HistoryEvent,
+  // Network
+  NetworkRequest,
+  NetworkQueryOptions,
+  NetworkSaveOptions,
+  NetworkSaveResult,
+  // Console
+  ConsoleEntry,
+  ConsoleQueryOptions,
+  ConsoleQueryResult,
+  ConsoleClearOptions,
+  // Curl
+  CurlOptions,
+  CurlResult,
+  // Input Mode
+  InputMode,
+  InputModeResult,
+  SetInputModeOptions,
+  // CDP Mode
+  CdpModeEnterOptions,
+  CdpModeEnterResult,
+  CdpModeExitResult,
 } from "./types.js";

@@ -14,8 +14,8 @@ Downloads the pre-built ABP browser binary for your platform (~130MB) on first i
 
 This package provides three things:
 
-1. **REST API client** — typed TypeScript SDK for the 40+ endpoint ABP REST API
-2. **MCP server** — 18 tools for AI-assisted browsing (Claude Code, Codex, or any MCP client)
+1. **REST API client** — typed TypeScript SDK for the 50+ endpoint ABP REST API
+2. **MCP server** — 21 tools for AI-assisted browsing (Claude Code, Codex, or any MCP client)
 3. **Debug server** — web UI for inspecting session history, screenshots, and action logs
 
 ---
@@ -70,7 +70,6 @@ npx agent-browser-protocol --post-settle 1000       # post-network settle time (
 npx agent-browser-protocol --zoom 1.5              # zoom factor
 npx agent-browser-protocol --config-file ./abp.json # config file path
 npx agent-browser-protocol --disable-pause          # disable execution control
-npx agent-browser-protocol --allow-system-inputs    # allow system inputs
 npx agent-browser-protocol -- --disable-gpu          # pass Chrome flags
 ```
 
@@ -84,6 +83,10 @@ The SDK mirrors the REST API 1:1:
 | `client.browser.status()` | `GET /browser/status` |
 | `client.browser.sessionData()` | `GET /browser/session-data` |
 | `client.browser.shutdown()` | `POST /browser/shutdown` |
+| `client.browser.inputMode()` | `GET /browser/input-mode` |
+| `client.browser.setInputMode({ input_mode })` | `POST /browser/input-mode` |
+| `client.browser.cdpModeEnter({ port? })` | `POST /browser/cdp-mode/enter` |
+| `client.browser.cdpModeExit()` | `POST /browser/cdp-mode/exit` |
 | **Tabs** | |
 | `client.tabs.list()` | `GET /tabs` |
 | `client.tabs.get(id)` | `GET /tabs/{id}` |
@@ -109,6 +112,7 @@ The SDK mirrors the REST API 1:1:
 | `client.tabs.clearText(id, { x, y })` | `POST /tabs/{id}/clear_text` |
 | `client.tabs.batch(id, { actions })` | `POST /tabs/{id}/batch` |
 | `client.tabs.waitForNetwork(id)` | `POST /tabs/{id}/wait_for_network` |
+| `client.tabs.curl(id, { url, method? })` | `POST /tabs/{id}/curl` |
 | **Observation** | |
 | `client.tabs.screenshot(id)` | `POST /tabs/{id}/screenshot` |
 | `client.tabs.screenshotBinary(id)` | `GET /tabs/{id}/screenshot` |
@@ -148,12 +152,19 @@ The SDK mirrors the REST API 1:1:
 | `client.history.event(id)` | `GET /history/events/{id}` |
 | `client.history.deleteEvents()` | `DELETE /history/events` |
 | `client.history.deleteAll()` | `DELETE /history` |
+| **Network** | |
+| `client.network.query({ tag?, url?, type? })` | `GET /network` |
+| `client.network.save({ tag })` | `POST /network/save` |
+| `client.network.clear(tag?)` | `DELETE /network` |
+| **Console** | |
+| `client.console.query({ level?, pattern? })` | `GET /console` |
+| `client.console.clear({ tab_id? })` | `DELETE /console` |
 
 ---
 
 ## 2. MCP Server
 
-ABP exposes 18 MCP tools: `browser_action`, `browser_scroll`, `browser_navigate`, `browser_screenshot`, `browser_tabs`, `browser_javascript`, `browser_text`, `browser_wait`, `browser_dialog`, `browser_downloads`, `browser_files`, `browser_select_picker`, `browser_get_status`, `browser_shutdown`, `browser_slider`, `browser_clear_text`, `respond_to_permission`.
+ABP exposes 21 MCP tools: `browser_action`, `browser_scroll`, `browser_navigate`, `browser_screenshot`, `browser_tabs`, `browser_javascript`, `browser_text`, `browser_wait`, `browser_dialog`, `browser_downloads`, `browser_files`, `browser_select_picker`, `browser_get_status`, `browser_shutdown`, `browser_slider`, `browser_clear_text`, `respond_to_permission`, `browser_network`, `browser_curl`, `browser_console`, `cdp_mode`.
 
 The browser launches automatically on first tool call at 1280x800 (optimized for LLM vision). Screenshots are served as WebP and scaled to fit context limits.
 
@@ -198,7 +209,7 @@ For example, in Claude Desktop (`claude_desktop_config.json`):
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ABP_PORT` | Port for ABP server | `8222` |
+| `ABP_PORT` | Port for ABP server | auto from `15678` |
 | `ABP_BROWSER_PATH` | Custom binary path | auto-detected |
 | `ABP_HEADLESS` | Run headless (`1`/`0`) | `0` |
 | `ABP_VERBOSE` | Pipe browser output to stderr (`1`/`0`) | `0` |
@@ -208,8 +219,7 @@ For example, in Claude Desktop (`claude_desktop_config.json`):
 | `ABP_ZOOM` | Default zoom factor | `1.0` |
 | `ABP_CONFIG` | Path to ABP JSON config file | none |
 | `ABP_DISABLE_PAUSE` | Disable execution control (`1`/`0`) | `0` |
-| `ABP_ALLOW_SYSTEM_INPUTS` | Allow system inputs (`1`/`0`) | `0` |
-| `ABP_ARGS` | Extra Chrome args (comma-separated) | none |
+| `ABP_ARGS` | Extra Chrome args, comma-separated (MCP proxy only) | none |
 
 ---
 
@@ -247,7 +257,7 @@ The debug server reads ABP's SQLite session database directly (read-only) and wa
 
 | Variable | Description |
 |---------|------------|
-| `ABP_PORT` | Port to listen on (default: `8222`) |
+| `ABP_PORT` | Port to listen on (default: auto from `15678`) |
 | `ABP_HEADLESS=1` | Run without a visible window |
 | `ABP_VERBOSE=1` | Pipe browser output to stderr |
 | `ABP_BROWSER_PATH` | Path to a custom ABP binary |
@@ -258,8 +268,7 @@ The debug server reads ABP's SQLite session database directly (read-only) and wa
 | `ABP_ZOOM` | Default zoom factor (default: `1.0`) |
 | `ABP_CONFIG` | Path to ABP JSON config file |
 | `ABP_DISABLE_PAUSE=1` | Disable execution control |
-| `ABP_ALLOW_SYSTEM_INPUTS=1` | Allow system inputs |
-| `ABP_ARGS` | Extra Chrome args, comma-separated (plugin only) |
+| `ABP_ARGS` | Extra Chrome args, comma-separated (MCP proxy only) |
 
 ## Platforms
 

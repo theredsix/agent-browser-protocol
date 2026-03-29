@@ -380,3 +380,136 @@ export interface SelectPopupOptions {
 export interface DownloadContentOptions {
   max_size?: number;
 }
+
+// === Network ===
+
+export interface NetworkRequest {
+  request_id: string;
+  action_id: string;
+  tab_id: string;
+  url: string;
+  url_hostname: string;
+  url_path: string;
+  url_query?: string;
+  method: string;
+  resource_type: string;
+  cors_preflight: boolean;
+  status: number;
+  started_at_ms: number;
+  completed_at_ms: number;
+  duration_ms: number;
+  virtual_time_ms: number;
+  request_headers?: string;
+  request_body?: string;
+  request_body_truncated?: boolean;
+  response_headers?: string;
+  response_body?: string;
+  response_body_truncated?: boolean;
+  response_body_encoding?: string;
+  redirect_chain?: string;
+}
+
+export interface NetworkQueryOptions {
+  tag?: string;
+  tab_id?: string;
+  action_id?: string;
+  url?: string;
+  hostname?: string;
+  path?: string;
+  query?: string;
+  method?: string;
+  status?: string;
+  type?: string;
+  include_body?: boolean;
+  max_body_size?: number;
+}
+
+export interface NetworkSaveOptions {
+  tag: string;
+  tab_id?: string;
+}
+
+export interface NetworkSaveResult {
+  saved: number;
+  tag: string;
+}
+
+// === Console ===
+
+export interface ConsoleEntry {
+  id: number;
+  tab_id: string;
+  level: "verbose" | "info" | "warning" | "error";
+  message: string;
+  line_number: number;
+  source_url: string;
+  stack_trace: string;
+  timestamp_ms: number;
+}
+
+export interface ConsoleQueryOptions {
+  tab_id?: string;
+  level?: "verbose" | "info" | "warning" | "error";
+  pattern?: string;
+  limit?: number;
+  after_id?: number;
+}
+
+export interface ConsoleQueryResult {
+  entries: ConsoleEntry[];
+  total_buffered: number;
+  oldest_id: number;
+}
+
+export interface ConsoleClearOptions {
+  tab_id?: string;
+}
+
+// === Curl ===
+
+export interface CurlOptions {
+  url: string;
+  method?: string;
+  body?: string;
+  headers?: Record<string, string>;
+  save_tag?: string;
+}
+
+export interface CurlResult {
+  status_code: number;
+  body: string;
+  body_is_base64: boolean;
+  final_url: string;
+  redirected: boolean;
+  headers: Record<string, string>;
+}
+
+// === Input Mode ===
+
+export type InputMode = "agent" | "human" | "cdp";
+
+export interface InputModeResult {
+  input_mode: InputMode;
+}
+
+export interface SetInputModeOptions {
+  input_mode: "agent" | "human";
+}
+
+// === CDP Mode ===
+
+export interface CdpModeEnterOptions {
+  port?: number;
+  timeout_ms?: number;
+}
+
+export interface CdpModeEnterResult {
+  status: string;
+  port: number;
+  ws_url: string;
+  timeout_ms?: number;
+}
+
+export interface CdpModeExitResult {
+  status: string;
+}

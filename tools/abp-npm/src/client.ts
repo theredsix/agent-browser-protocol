@@ -45,6 +45,20 @@ import type {
   HistoryAction,
   HistoryEvent,
   ActionRequest,
+  NetworkRequest,
+  NetworkQueryOptions,
+  NetworkSaveOptions,
+  NetworkSaveResult,
+  ConsoleQueryOptions,
+  ConsoleQueryResult,
+  ConsoleClearOptions,
+  CurlOptions,
+  CurlResult,
+  InputModeResult,
+  SetInputModeOptions,
+  CdpModeEnterOptions,
+  CdpModeEnterResult,
+  CdpModeExitResult,
 } from "./types.js";
 
 class BrowserAPI {
@@ -65,6 +79,35 @@ class BrowserAPI {
       method: "POST",
       body: options || {},
     });
+  }
+
+  async inputMode(): Promise<InputModeResult> {
+    const res = await request<InputModeResult>(`${this.baseUrl}/browser/input-mode`);
+    return res.data;
+  }
+
+  async setInputMode(options: SetInputModeOptions): Promise<InputModeResult> {
+    const res = await request<InputModeResult>(`${this.baseUrl}/browser/input-mode`, {
+      method: "POST",
+      body: options,
+    });
+    return res.data;
+  }
+
+  async cdpModeEnter(options?: CdpModeEnterOptions): Promise<CdpModeEnterResult> {
+    const res = await request<CdpModeEnterResult>(`${this.baseUrl}/browser/cdp-mode/enter`, {
+      method: "POST",
+      body: options || {},
+    });
+    return res.data;
+  }
+
+  async cdpModeExit(): Promise<CdpModeExitResult> {
+    const res = await request<CdpModeExitResult>(`${this.baseUrl}/browser/cdp-mode/exit`, {
+      method: "POST",
+      body: {},
+    });
+    return res.data;
   }
 }
 
@@ -316,6 +359,14 @@ class TabsAPI {
     );
     return res.data;
   }
+
+  async curl(tabId: string, options: CurlOptions): Promise<CurlResult> {
+    const res = await request<CurlResult>(
+      `${this.baseUrl}/tabs/${tabId}/curl`,
+      { method: "POST", body: options },
+    );
+    return res.data;
+  }
 }
 
 class DownloadsAPI {
@@ -470,6 +521,75 @@ class HistoryAPI {
   }
 }
 
+class NetworkAPI {
+  constructor(private baseUrl: string) {}
+
+  async query(options?: NetworkQueryOptions): Promise<{ requests: NetworkRequest[] }> {
+    const params = new URLSearchParams();
+    if (options?.tag) params.set("tag", options.tag);
+    if (options?.tab_id) params.set("tab_id", options.tab_id);
+    if (options?.action_id) params.set("action_id", options.action_id);
+    if (options?.url) params.set("url", options.url);
+    if (options?.hostname) params.set("hostname", options.hostname);
+    if (options?.path) params.set("path", options.path);
+    if (options?.query) params.set("query", options.query);
+    if (options?.method) params.set("method", options.method);
+    if (options?.status) params.set("status", options.status);
+    if (options?.type) params.set("type", options.type);
+    if (options?.include_body) params.set("include_body", "true");
+    if (options?.max_body_size !== undefined) params.set("max_body_size", String(options.max_body_size));
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const res = await request<{ requests: NetworkRequest[] }>(
+      `${this.baseUrl}/network${query}`,
+    );
+    return res.data;
+  }
+
+  async save(options: NetworkSaveOptions): Promise<NetworkSaveResult> {
+    const res = await request<NetworkSaveResult>(
+      `${this.baseUrl}/network/save`,
+      { method: "POST", body: options },
+    );
+    return res.data;
+  }
+
+  async clear(tag?: string): Promise<{ status: string }> {
+    const query = tag ? `?tag=${encodeURIComponent(tag)}` : "";
+    const res = await request<{ status: string }>(
+      `${this.baseUrl}/network${query}`,
+      { method: "DELETE" },
+    );
+    return res.data;
+  }
+}
+
+class ConsoleAPI {
+  constructor(private baseUrl: string) {}
+
+  async query(options?: ConsoleQueryOptions): Promise<ConsoleQueryResult> {
+    const params = new URLSearchParams();
+    if (options?.tab_id) params.set("tab_id", options.tab_id);
+    if (options?.level) params.set("level", options.level);
+    if (options?.pattern) params.set("pattern", options.pattern);
+    if (options?.limit !== undefined) params.set("limit", String(options.limit));
+    if (options?.after_id !== undefined) params.set("after_id", String(options.after_id));
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const res = await request<ConsoleQueryResult>(
+      `${this.baseUrl}/console${query}`,
+    );
+    return res.data;
+  }
+
+  async clear(options?: ConsoleClearOptions): Promise<{ cleared: number }> {
+    const query = options?.tab_id ? `?tab_id=${encodeURIComponent(options.tab_id)}` : "";
+    const res = await request<{ cleared: number }>(
+      `${this.baseUrl}/console${query}`,
+      { method: "DELETE" },
+    );
+    return res.data;
+  }
+}
+
 export class ABPClient {
   readonly browser: BrowserAPI;
   readonly tabs: TabsAPI;
@@ -478,6 +598,8 @@ export class ABPClient {
   readonly permissions: PermissionsAPI;
   readonly selectPopup: SelectPopupAPI;
   readonly history: HistoryAPI;
+  readonly network: NetworkAPI;
+  readonly console: ConsoleAPI;
 
   constructor(baseUrl: string = "http://localhost:8222/api/v1") {
     const url = baseUrl.replace(/\/+$/, "");
@@ -488,5 +610,7 @@ export class ABPClient {
     this.permissions = new PermissionsAPI(url);
     this.selectPopup = new SelectPopupAPI(url);
     this.history = new HistoryAPI(url);
+    this.network = new NetworkAPI(url);
+    this.console = new ConsoleAPI(url);
   }
 }
