@@ -18,6 +18,12 @@ PendingSelectPopup::PendingSelectPopup(PendingSelectPopup&&) = default;
 PendingSelectPopup& PendingSelectPopup::operator=(PendingSelectPopup&&) =
     default;
 
+PendingDateTimePopup::PendingDateTimePopup() = default;
+PendingDateTimePopup::~PendingDateTimePopup() = default;
+PendingDateTimePopup::PendingDateTimePopup(PendingDateTimePopup&&) = default;
+PendingDateTimePopup& PendingDateTimePopup::operator=(
+    PendingDateTimePopup&&) = default;
+
 AbpPopupInterceptor::AbpPopupInterceptor(AbpController* controller)
     : controller_(controller) {}
 
@@ -152,6 +158,126 @@ void AbpPopupInterceptor::CleanupForTab(const std::string& tab_id) {
       ++it;
     }
   }
+  for (auto it = pending_datetime_popups_.begin();
+       it != pending_datetime_popups_.end();) {
+    if (it->second.tab_id == tab_id) {
+      it = pending_datetime_popups_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+std::string AbpPopupInterceptor::GenerateDateTimePopupId() {
+  return base::StringPrintf("dtp_%d", next_datetime_popup_id_++);
+}
+
+bool AbpPopupInterceptor::OnDateTimePopupRequested(
+    content::RenderFrameHost* rfh,
+    mojo::PendingRemote<blink::mojom::DateTimePopupClient> client,
+    blink::mojom::DateTimePopupParamsPtr params) {
+  if (!controller_)
+    return false;
+
+  std::string tab_id;
+  if (rfh) {
+    auto* wc = content::WebContents::FromRenderFrameHost(rfh);
+    if (wc) {
+      tab_id = controller_->GetTabIdForWebContents(wc);
+    }
+  }
+  if (tab_id.empty())
+    return false;
+
+  std::string popup_id = GenerateDateTimePopupId();
+
+  VLOG(1) << "ABP: Date/time popup intercepted, id=" << popup_id
+          << " tab=" << tab_id
+          << " input_type=" << params->input_type;
+
+  base::Value::Dict event_data;
+  event_data.Set("type", "datetime_picker_open");
+  event_data.Set("id", popup_id);
+  event_data.Set("tab_id", tab_id);
+  event_data.Set("input_type", params->input_type);
+  event_data.Set("value", params->value);
+  event_data.Set("min", params->min);
+  event_data.Set("max", params->max);
+  event_data.Set("step", params->step);
+
+  base::Value::Dict bounds_dict;
+  bounds_dict.Set("x", params->bounds.x());
+  bounds_dict.Set("y", params->bounds.y());
+  bounds_dict.Set("width", params->bounds.width());
+  bounds_dict.Set("height", params->bounds.height());
+  event_data.Set("bounds", std::move(bounds_dict));
+
+  PendingDateTimePopup pending;
+  pending.tab_id = tab_id;
+  pending.client.Bind(std::move(client));
+  pending.params = std::move(params);
+
+  // Set disconnect handler to clean up if renderer goes away
+  pending.client.set_disconnect_handler(base::BindOnce(
+      [](AbpPopupInterceptor* self, std::string id) {
+        VLOG(1) << "ABP: Date/time popup " << id << " disconnected";
+        self->pending_datetime_popups_.erase(id);
+      },
+      base::Unretained(this), popup_id));
+
+  pending_datetime_popups_[popup_id] = std::move(pending);
+
+  controller_->EmitPopupEvent("datetime_picker_open", std::move(event_data));
+
+  return true;  // Intercepted — suppress native UI
+}
+
+bool AbpPopupInterceptor::RespondToDateTimePopup(
+    const std::string& popup_id,
+    const std::string& iso_value) {
+  auto it = pending_datetime_popups_.find(popup_id);
+  if (it == pending_datetime_popups_.end())
+    return false;
+
+  it->second.client->DidChooseValue(iso_value);
+  pending_datetime_popups_.erase(it);
+  return true;
+}
+
+bool AbpPopupInterceptor::CancelDateTimePopup(const std::string& popup_id) {
+  auto it = pending_datetime_popups_.find(popup_id);
+  if (it == pending_datetime_popups_.end())
+    return false;
+
+  it->second.client->DidCancel();
+  pending_datetime_popups_.erase(it);
+  return true;
+}
+
+base::Value::Dict AbpPopupInterceptor::GetPendingDateTimePopup(
+    const std::string& popup_id) const {
+  auto it = pending_datetime_popups_.find(popup_id);
+  if (it == pending_datetime_popups_.end())
+    return base::Value::Dict();
+
+  base::Value::Dict result;
+  result.Set("type", "datetime_picker_open");
+  result.Set("id", popup_id);
+  result.Set("tab_id", it->second.tab_id);
+  result.Set("input_type", it->second.params->input_type);
+  result.Set("value", it->second.params->value);
+  result.Set("min", it->second.params->min);
+  result.Set("max", it->second.params->max);
+  result.Set("step", it->second.params->step);
+
+  base::Value::Dict bounds;
+  bounds.Set("x", it->second.params->bounds.x());
+  bounds.Set("y", it->second.params->bounds.y());
+  bounds.Set("width", it->second.params->bounds.width());
+  bounds.Set("height", it->second.params->bounds.height());
+  result.Set("bounds", std::move(bounds));
+
+  return result;
 }
 
 // static

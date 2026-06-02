@@ -13,6 +13,7 @@
 #include "base/values.h"
 #include "content/public/browser/popup_interceptor.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/blink/public/mojom/choosers/date_time_popup.mojom.h"
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
 
 namespace abp {
@@ -31,6 +32,17 @@ struct PendingSelectPopup {
   int32_t selected_index = 0;
   bool allow_multiple = false;
   gfx::Rect bounds;
+};
+
+struct PendingDateTimePopup {
+  PendingDateTimePopup();
+  ~PendingDateTimePopup();
+  PendingDateTimePopup(PendingDateTimePopup&&);
+  PendingDateTimePopup& operator=(PendingDateTimePopup&&);
+
+  std::string tab_id;
+  mojo::Remote<blink::mojom::DateTimePopupClient> client;
+  blink::mojom::DateTimePopupParamsPtr params;
 };
 
 class AbpPopupInterceptor : public content::PopupInterceptor {
@@ -56,11 +68,26 @@ class AbpPopupInterceptor : public content::PopupInterceptor {
   // Get pending popup info as JSON (for REST/MCP)
   base::Value::Dict GetPendingSelectPopup(const std::string& popup_id) const;
 
+  // content::PopupInterceptor:
+  bool OnDateTimePopupRequested(
+      content::RenderFrameHost* rfh,
+      mojo::PendingRemote<blink::mojom::DateTimePopupClient> client,
+      blink::mojom::DateTimePopupParamsPtr params) override;
+
+  // Respond to a pending date/time popup. Returns false if popup_id not found.
+  bool RespondToDateTimePopup(const std::string& popup_id,
+                              const std::string& iso_value);
+  bool CancelDateTimePopup(const std::string& popup_id);
+
+  // Get pending date/time popup info as JSON (for REST/MCP)
+  base::Value::Dict GetPendingDateTimePopup(const std::string& popup_id) const;
+
   // Clean up popups for a tab (called on tab close)
   void CleanupForTab(const std::string& tab_id);
 
  private:
   std::string GenerateSelectPopupId();
+  std::string GenerateDateTimePopupId();
 
   // Serialize menu items to JSON
   static base::Value::List SerializeMenuItems(
@@ -69,6 +96,8 @@ class AbpPopupInterceptor : public content::PopupInterceptor {
   raw_ptr<AbpController> controller_;
   std::map<std::string, PendingSelectPopup> pending_select_popups_;
   int next_select_popup_id_ = 1;
+  std::map<std::string, PendingDateTimePopup> pending_datetime_popups_;
+  int next_datetime_popup_id_ = 1;
 };
 
 }  // namespace abp
