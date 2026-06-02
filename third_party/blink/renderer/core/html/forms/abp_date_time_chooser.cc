@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "third_party/blink/public/mojom/choosers/date_time_popup.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/dom/element.h"
