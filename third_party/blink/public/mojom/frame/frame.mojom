@@ -28,6 +28,7 @@ import "skia/public/mojom/skcolor.mojom";
 import "skia/public/mojom/skcolor4f.mojom";
 import "third_party/blink/public/mojom/blob/blob.mojom";
 import "third_party/blink/public/mojom/blob/blob_url_store.mojom";
+import "third_party/blink/public/mojom/choosers/date_time_popup.mojom";
 import "third_party/blink/public/mojom/choosers/popup_menu.mojom";
 import "third_party/blink/public/mojom/close_watcher/close_listener.mojom";
 import "third_party/blink/public/mojom/confidence_level.mojom";
@@ -549,6 +550,12 @@ interface LocalFrameHost {
                 array<MenuItem> menu_items,
                 bool right_aligned,
                 bool allow_multiple_selection);
+
+  // ABP: request the embedder's popup interceptor to handle a date/time
+  // input's picker. Mirrors ShowPopupMenu. If no interceptor is present the
+  // browser calls DidCancel() on |client|.
+  ShowDateTimePopup(DateTimePopupParams params,
+                    pending_remote<DateTimePopupClient> client);
 
   // Similar to content.mojom.FrameHost::CreateNewWindow, except used for
   // sub-widgets, like <select> dropdowns. Upon return, the renderer side popup

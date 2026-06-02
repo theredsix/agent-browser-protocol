@@ -1,0 +1,30 @@
+// Copyright 2026 Han Wang. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "third_party/blink/public/mojom/choosers/date_time_chooser.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
+// Parameters describing a date/time picker the agent should respond to.
+// All values are ISO strings in the input element's own format (e.g.
+// "2026-01-15" for date, "10:30" for time, "2026-01" for month), so neither
+// the browser nor the agent does date arithmetic.
+struct DateTimePopupParams {
+  string input_type;   // "date"|"time"|"datetime-local"|"month"|"week"
+  string value;        // current value (ISO), may be empty
+  string min;          // ISO, may be empty
+  string max;          // ISO, may be empty
+  double step;
+  array<DateTimeSuggestion> suggestions;
+  gfx.mojom.Rect bounds;
+};
+
+// Browser -> renderer. The browser (ABP interceptor) holds a remote and calls
+// exactly one of these to resolve a pending date/time picker.
+interface DateTimePopupClient {
+  // |value| is an ISO string; the renderer applies it via the input element.
+  DidChooseValue(string value);
+  DidCancel();
+};
