@@ -33,9 +33,14 @@ AbpDateTimeChooser::AbpDateTimeChooser(
   // ISO strings are carried from HTMLInputElement::SetupDateTimeChooserParameters
   // (they are already serialized for temporal inputs), so we avoid having to
   // invert the doubles in DateTimeChooserParameters here.
-  popup_params->value = parameters.value_string;
-  popup_params->min = parameters.min_string;
-  popup_params->max = parameters.max_string;
+  // The mojo `string` fields are non-nullable. Absent min/max attributes (and
+  // an unset value) yield a null WTF::String, so coerce to empty.
+  popup_params->value =
+      parameters.value_string.IsNull() ? g_empty_string : parameters.value_string;
+  popup_params->min =
+      parameters.min_string.IsNull() ? g_empty_string : parameters.min_string;
+  popup_params->max =
+      parameters.max_string.IsNull() ? g_empty_string : parameters.max_string;
   popup_params->step = parameters.step;
   for (const auto& suggestion : parameters.suggestions) {
     popup_params->suggestions.push_back(suggestion->Clone());
