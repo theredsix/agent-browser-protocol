@@ -77,6 +77,7 @@
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/frame/web_remote_frame_impl.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
+#include "third_party/blink/renderer/core/html/forms/abp_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser_client.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser_popup_ui_controller.h"
@@ -811,20 +812,9 @@ DateTimeChooser* ChromeClientImpl::OpenDateTimeChooser(
     DateTimeChooserClient* picker_client,
     const DateTimeChooserParameters& parameters) {
   NotifyPopupOpeningObservers();
-  if (RuntimeEnabledFeatures::InputMultipleFieldsUIEnabled()) {
-    return MakeGarbageCollected<DateTimeChooserImpl>(frame, picker_client,
-                                                     parameters);
-  }
-
-  // JavaScript may try to open a date time chooser while one is already open.
-  if (external_date_time_chooser_ &&
-      external_date_time_chooser_->IsShowingDateTimeChooserUI())
-    return nullptr;
-
-  external_date_time_chooser_ =
-      MakeGarbageCollected<ExternalDateTimeChooser>(picker_client);
-  external_date_time_chooser_->OpenDateTimeChooser(frame, parameters);
-  return external_date_time_chooser_.Get();
+  // ABP fork: always route date/time pickers to the browser interceptor.
+  return MakeGarbageCollected<AbpDateTimeChooser>(frame, picker_client,
+                                                  parameters);
 }
 
 ExternalDateTimeChooser*
