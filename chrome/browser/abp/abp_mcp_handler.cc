@@ -549,6 +549,22 @@ base::Value::List GetToolDefinitions() {
                            "Dismiss the popup without selecting")
           .Build());
 
+  // 11b. browser_datetime_picker
+  tools.Append(
+      ToolBuilder("browser_datetime_picker")
+          .Description(
+              "Respond to a date/time picker (datetime_picker_open event) by "
+              "choosing an ISO value or cancelling.")
+          .RequiredString("popup_id",
+                          "The date/time popup ID from the datetime_picker_open "
+                          "event")
+          .OptionalString("value",
+                          "ISO value to set (e.g. \"2026-01-15\" for date, "
+                          "\"10:30\" for time)")
+          .OptionalBoolean("cancel",
+                           "Cancel the picker without choosing a value")
+          .Build());
+
   // 12. browser_get_status
   tools.Append(ToolBuilder("browser_get_status")
                    .Description("Get browser status and readiness")
@@ -837,6 +853,7 @@ All `tab_id` parameters are optional and default to the active tab.
 - `browser_downloads` — action? (list, status, cancel, content; default: list), download_id?, state?, limit?, max_size?. Use action:"content" with download_id to retrieve file bytes as base64 BlobResourceContents.
 - `browser_files` — chooser_id (required), files?, content_files?, path?, cancel?, max_size?. Use content_files for base64 uploads: [{filename, data, mime_type}].
 - `browser_select_picker` — popup_id (required), indices? (array of ints), cancel?. Respond to a pending <select> popup.
+- `browser_datetime_picker` — popup_id (required), value? (ISO string), cancel?. Respond to a date/time picker (datetime_picker_open event).
 - `respond_to_permission` — permission_id (required), permission_type (required), allow (required), latitude?, longitude?, accuracy?. Respond to a permission prompt. When granting geolocation, provide latitude and longitude for mock coordinates.
 
 **Browser:**
@@ -1116,6 +1133,8 @@ void AbpMcpHandler::HandleToolsCall(const base::Value::Dict& params,
     CallBrowserFiles(*args, std::move(request_id), std::move(callback));
   } else if (*name == "browser_select_picker") {
     CallBrowserSelectPicker(*args, std::move(request_id), std::move(callback));
+  } else if (*name == "browser_datetime_picker") {
+    CallBrowserDateTimePicker(*args, std::move(request_id), std::move(callback));
   } else if (*name == "browser_get_status") {
     CallBrowserGetStatus(*args, std::move(request_id), std::move(callback));
   } else if (*name == "cdp_mode") {
@@ -1828,6 +1847,31 @@ void AbpMcpHandler::CallBrowserSelectPicker(
 
   controller_->HandleRequest(
       "POST", "/api/v1/select/" + *popup_id, body,
+      base::BindOnce(&AbpMcpHandler::OnControllerResponse,
+                     weak_factory_.GetWeakPtr(), std::move(request_id),
+                     std::move(callback)));
+}
+
+// --- 11b. browser_datetime_picker ---
+void AbpMcpHandler::CallBrowserDateTimePicker(
+    const base::Value::Dict& args,
+    base::Value request_id,
+    ResponseWithHeadersCallback callback) {
+  const std::string* popup_id = args.FindString("popup_id");
+  if (!popup_id) {
+    SendJsonRpcError(std::move(request_id), kInvalidParams,
+                     "Missing popup_id", std::move(callback));
+    return;
+  }
+
+  base::Value::Dict body_dict = args.Clone();
+  body_dict.Remove("popup_id");
+
+  std::string body;
+  base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
+
+  controller_->HandleRequest(
+      "POST", "/api/v1/datetime-picker/" + *popup_id, body,
       base::BindOnce(&AbpMcpHandler::OnControllerResponse,
                      weak_factory_.GetWeakPtr(), std::move(request_id),
                      std::move(callback)));

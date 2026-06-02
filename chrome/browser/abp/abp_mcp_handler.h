@@ -88,6 +88,9 @@ class AbpMcpHandler {
   void CallBrowserSelectPicker(const base::Value::Dict& args,
                                base::Value request_id,
                                ResponseWithHeadersCallback callback);
+  void CallBrowserDateTimePicker(const base::Value::Dict& args,
+                                 base::Value request_id,
+                                 ResponseWithHeadersCallback callback);
   void CallBrowserGetStatus(const base::Value::Dict& args,
                             base::Value request_id,
                             ResponseWithHeadersCallback callback);
