@@ -9,6 +9,7 @@
 
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/blink/public/mojom/choosers/date_time_popup.mojom-forward.h"
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom-forward.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -33,6 +34,14 @@ class CONTENT_EXPORT PopupInterceptor {
       int32_t selected_item,
       std::vector<blink::mojom::MenuItemPtr> menu_items,
       bool allow_multiple_selection) = 0;
+
+  // Called when a date/time <input> requests its picker. Returns true if
+  // intercepted (native picker suppressed). The interceptor takes ownership of
+  // |client| to deliver the chosen ISO value (or cancel).
+  virtual bool OnDateTimePopupRequested(
+      RenderFrameHost* rfh,
+      mojo::PendingRemote<blink::mojom::DateTimePopupClient> client,
+      blink::mojom::DateTimePopupParamsPtr params) = 0;
 };
 
 }  // namespace content

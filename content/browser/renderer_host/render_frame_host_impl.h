@@ -143,6 +143,7 @@
 #include "third_party/blink/public/mojom/blob/file_backed_blob_factory.mojom-forward.h"
 #include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
 #include "third_party/blink/public/mojom/buckets/bucket_manager_host.mojom.h"
+#include "third_party/blink/public/mojom/choosers/date_time_popup.mojom-forward.h"
 #include "third_party/blink/public/mojom/dom_storage/storage_area.mojom.h"
 #include "third_party/blink/public/mojom/feature_observer/feature_observer.mojom-forward.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom-forward.h"
@@ -2554,6 +2555,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
       std::vector<blink::mojom::MenuItemPtr> menu_items,
       bool right_aligned,
       bool allow_multiple_selection) override;
+  void ShowDateTimePopup(
+      blink::mojom::DateTimePopupParamsPtr params,
+      mojo::PendingRemote<blink::mojom::DateTimePopupClient> client) override;
   void CreateNewPopupWidget(
       mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
           blink_popup_widget_host,
