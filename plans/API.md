@@ -499,7 +499,16 @@ A native date/time picker (`<input type=date|time|datetime-local|month|week>`) w
 }
 ```
 
-Respond:
+Respond with an ISO `value` (required unless cancelling) whose format matches `input_type`:
+
+| `input_type` | `value` format | example |
+|--------------|----------------|---------|
+| `date` | `YYYY-MM-DD` | `2026-06-15` |
+| `time` | `HH:MM` (24h) | `14:45` |
+| `datetime-local` | `YYYY-MM-DDTHH:MM` | `2026-06-15T14:45` |
+| `month` | `YYYY-MM` | `2026-06` |
+| `week` | `YYYY-Www` (ISO week) | `2026-W25` |
+
 ```bash
 curl -X POST http://localhost:8222/api/v1/datetime-picker/dtp_1 \
   -H "Content-Type: application/json" -d '{"value":"2026-06-15"}'

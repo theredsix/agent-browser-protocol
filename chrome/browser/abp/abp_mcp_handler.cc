@@ -553,16 +553,24 @@ base::Value::List GetToolDefinitions() {
   tools.Append(
       ToolBuilder("browser_datetime_picker")
           .Description(
-              "Respond to a date/time picker (datetime_picker_open event) by "
-              "choosing an ISO value or cancelling.")
+              "Respond to a date/time picker (from a datetime_picker_open "
+              "event): choose an ISO value, or cancel to dismiss.")
           .RequiredString("popup_id",
-                          "The date/time popup ID from the datetime_picker_open "
-                          "event")
-          .OptionalString("value",
-                          "ISO value to set (e.g. \"2026-01-15\" for date, "
-                          "\"10:30\" for time)")
-          .OptionalBoolean("cancel",
-                           "Cancel the picker without choosing a value")
+                          "The 'id' from the datetime_picker_open event")
+          .RequiredStringEnum(
+              "action",
+              "\"choose\" to apply a value, or \"cancel\" to dismiss the picker "
+              "without choosing",
+              {"choose", "cancel"})
+          .OptionalString(
+              "value",
+              "ISO value to apply when action is \"choose\". The format must "
+              "match the event's input_type: "
+              "date -> \"2026-06-15\"; "
+              "time -> \"14:45\" (24h HH:MM); "
+              "datetime-local -> \"2026-06-15T14:45\"; "
+              "month -> \"2026-06\"; "
+              "week -> \"2026-W25\" (ISO week).")
           .Build());
 
   // 12. browser_get_status
@@ -853,7 +861,7 @@ All `tab_id` parameters are optional and default to the active tab.
 - `browser_downloads` — action? (list, status, cancel, content; default: list), download_id?, state?, limit?, max_size?. Use action:"content" with download_id to retrieve file bytes as base64 BlobResourceContents.
 - `browser_files` — chooser_id (required), files?, content_files?, path?, cancel?, max_size?. Use content_files for base64 uploads: [{filename, data, mime_type}].
 - `browser_select_picker` — popup_id (required), indices? (array of ints), cancel?. Respond to a pending <select> popup.
-- `browser_datetime_picker` — popup_id (required), value? (ISO string), cancel?. Respond to a date/time picker (datetime_picker_open event).
+- `browser_datetime_picker` — popup_id (required), action (required: `choose`|`cancel`), value (ISO when action=choose; format per input_type: date `2026-06-15`, time `14:45`, datetime-local `2026-06-15T14:45`, month `2026-06`, week `2026-W25`). Respond to a date/time picker (datetime_picker_open event).
 - `respond_to_permission` — permission_id (required), permission_type (required), allow (required), latitude?, longitude?, accuracy?. Respond to a permission prompt. When granting geolocation, provide latitude and longitude for mock coordinates.
 
 **Browser:**
@@ -1864,8 +1872,14 @@ void AbpMcpHandler::CallBrowserDateTimePicker(
     return;
   }
 
-  base::Value::Dict body_dict = args.Clone();
-  body_dict.Remove("popup_id");
+  // Translate the action discriminator to the REST cancel/value contract.
+  const std::string* action = args.FindString("action");
+  base::Value::Dict body_dict;
+  if (action && *action == "cancel") {
+    body_dict.Set("cancel", true);
+  } else if (const std::string* value = args.FindString("value")) {
+    body_dict.Set("value", *value);
+  }
 
   std::string body;
   base::JSONWriter::Write(base::Value(std::move(body_dict)), &body);
