@@ -83,21 +83,6 @@ def find_picker_event(envelope, want_type):
     return None
 
 
-def history_picker_event(want_type):
-    """Fallback: query recent event history for the picker event."""
-    try:
-        h = req("GET", "/history/events?limit=20")
-    except Exception:
-        return None
-    items = h.get("events", h) if isinstance(h, dict) else h
-    for e in (items or []):
-        data = e.get("data", e) if isinstance(e, dict) else {}
-        if data.get("type") == "datetime_picker_open" and \
-           data.get("input_type") == want_type:
-            return data
-    return None
-
-
 def fail(msg):
     print("FAIL: " + msg)
     return 1
@@ -114,9 +99,6 @@ def check_datetime(t, input_type):
               {"script": "window.__showPicker('%s')" % input_type})
     picker = find_picker_event(env, input_type)
     if not picker:
-        time.sleep(0.4)
-        picker = history_picker_event(input_type)
-    if not picker:
         return fail("%s: no datetime_picker_open event surfaced "
                     "(envelope events=%s)"
                     % (input_type, json.dumps(env.get("events") if isinstance(env, dict) else env)[:300]))
@@ -132,8 +114,12 @@ def check_datetime(t, input_type):
     if not (isinstance(resp, dict) and resp.get("success")):
         return fail("%s: respond failed: %s" % (input_type, json.dumps(resp)[:200]))
 
-    time.sleep(0.3)
-    got = ev(t, "document.getElementById('%s').value" % input_type)
+    got = None
+    for _ in range(20):
+        got = ev(t, "document.getElementById('%s').value" % input_type)
+        if got == new_val:
+            break
+        time.sleep(0.05)
     log = ev(t, "JSON.stringify(window.__log)")
     if got != new_val:
         return fail("%s: value not applied (got %r, expected %r); log=%s"

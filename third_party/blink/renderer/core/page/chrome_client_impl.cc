@@ -84,7 +84,6 @@
 #include "third_party/blink/renderer/core/html/forms/color_chooser_ui_controller.h"
 #include "third_party/blink/renderer/core/html/forms/date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/date_time_chooser_client.h"
-#include "third_party/blink/renderer/core/html/forms/date_time_chooser_impl.h"
 #include "third_party/blink/renderer/core/html/forms/external_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/external_popup_menu.h"
 #include "third_party/blink/renderer/core/html/forms/file_chooser.h"
@@ -812,9 +811,24 @@ DateTimeChooser* ChromeClientImpl::OpenDateTimeChooser(
     DateTimeChooserClient* picker_client,
     const DateTimeChooserParameters& parameters) {
   NotifyPopupOpeningObservers();
-  // ABP fork: always route date/time pickers to the browser interceptor.
-  return MakeGarbageCollected<AbpDateTimeChooser>(frame, picker_client,
-                                                  parameters);
+  // ABP fork: route the desktop multi-field date/time picker to the browser
+  // interceptor (AbpDateTimeChooser, replacing the in-renderer DateTimeChooserImpl
+  // page popup). The non-multiple-fields path (Android, and unit tests that force
+  // the feature off) keeps the platform ExternalDateTimeChooser.
+  if (RuntimeEnabledFeatures::InputMultipleFieldsUIEnabled()) {
+    return MakeGarbageCollected<AbpDateTimeChooser>(frame, picker_client,
+                                                    parameters);
+  }
+
+  // JavaScript may try to open a date time chooser while one is already open.
+  if (external_date_time_chooser_ &&
+      external_date_time_chooser_->IsShowingDateTimeChooserUI())
+    return nullptr;
+
+  external_date_time_chooser_ =
+      MakeGarbageCollected<ExternalDateTimeChooser>(picker_client);
+  external_date_time_chooser_->OpenDateTimeChooser(frame, parameters);
+  return external_date_time_chooser_.Get();
 }
 
 ExternalDateTimeChooser*

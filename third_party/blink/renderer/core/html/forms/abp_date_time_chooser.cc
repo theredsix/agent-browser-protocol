@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors
+// Copyright 2026 Han Wang. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -64,6 +64,9 @@ void AbpDateTimeChooser::Trace(Visitor* visitor) const {
 }
 
 void AbpDateTimeChooser::DidChooseValue(const String& value) {
+  // The picker is resolved; drop the mojo receiver so this object can be
+  // collected and stops holding the pipe (mirrors ExternalDateTimeChooser).
+  receiver_.reset();
   // Cache the owner element first, because DidChooseValue might run
   // JavaScript code and destroy |client_|.
   Element* element = client_ ? &client_->OwnerElement() : nullptr;
@@ -88,6 +91,7 @@ void AbpDateTimeChooser::DidChooseValue(const String& value) {
 }
 
 void AbpDateTimeChooser::DidCancel() {
+  receiver_.reset();
   if (client_) {
     client_->DidEndChooser();
   }
