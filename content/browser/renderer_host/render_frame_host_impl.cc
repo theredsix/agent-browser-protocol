@@ -284,6 +284,7 @@
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/back_forward_cache_not_restored_reasons.mojom.h"
 #include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
+#include "third_party/blink/public/mojom/choosers/date_time_popup.mojom.h"
 #include "third_party/blink/public/mojom/confidence_level.mojom.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
@@ -9374,6 +9375,22 @@ void RenderFrameHostImpl::ShowPopupMenu(
                       font_size, selected_item, std::move(menu_items),
                       right_aligned, allow_multiple_selection);
 #endif
+}
+
+void RenderFrameHostImpl::ShowDateTimePopup(
+    blink::mojom::DateTimePopupParamsPtr params,
+    mojo::PendingRemote<blink::mojom::DateTimePopupClient> client) {
+  if (auto* wc = WebContents::FromRenderFrameHost(this)) {
+    if (auto* interceptor = wc->GetPopupInterceptor()) {
+      if (interceptor->OnDateTimePopupRequested(this, std::move(client),
+                                                std::move(params))) {
+        return;  // Intercepted.
+      }
+    }
+  }
+  // No interceptor: tell the renderer to cancel so the field stays editable.
+  mojo::Remote<blink::mojom::DateTimePopupClient> bound(std::move(client));
+  bound->DidCancel();
 }
 
 void RenderFrameHostImpl::ShowContextMenu(

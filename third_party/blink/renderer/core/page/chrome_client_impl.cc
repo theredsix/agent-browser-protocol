@@ -77,13 +77,13 @@
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/frame/web_remote_frame_impl.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
+#include "third_party/blink/renderer/core/html/forms/abp_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser_client.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser_popup_ui_controller.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser_ui_controller.h"
 #include "third_party/blink/renderer/core/html/forms/date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/date_time_chooser_client.h"
-#include "third_party/blink/renderer/core/html/forms/date_time_chooser_impl.h"
 #include "third_party/blink/renderer/core/html/forms/external_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/external_popup_menu.h"
 #include "third_party/blink/renderer/core/html/forms/file_chooser.h"
@@ -811,9 +811,13 @@ DateTimeChooser* ChromeClientImpl::OpenDateTimeChooser(
     DateTimeChooserClient* picker_client,
     const DateTimeChooserParameters& parameters) {
   NotifyPopupOpeningObservers();
+  // ABP fork: route the desktop multi-field date/time picker to the browser
+  // interceptor (AbpDateTimeChooser, replacing the in-renderer DateTimeChooserImpl
+  // page popup). The non-multiple-fields path (Android, and unit tests that force
+  // the feature off) keeps the platform ExternalDateTimeChooser.
   if (RuntimeEnabledFeatures::InputMultipleFieldsUIEnabled()) {
-    return MakeGarbageCollected<DateTimeChooserImpl>(frame, picker_client,
-                                                     parameters);
+    return MakeGarbageCollected<AbpDateTimeChooser>(frame, picker_client,
+                                                    parameters);
   }
 
   // JavaScript may try to open a date time chooser while one is already open.

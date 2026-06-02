@@ -67,6 +67,13 @@ struct DateTimeChooserParameters {
   Vector<mojom::blink::DateTimeSuggestionPtr> suggestions;
   double minimum = 0;
   double maximum = 0;
+  // ABP fork: ISO string representations of the current value and the min/max
+  // bounds. These are populated directly from the input element (which already
+  // serializes temporal values as ISO strings) so consumers do not need to
+  // invert the doubles above. Used by AbpDateTimeChooser.
+  String value_string;
+  String min_string;
+  String max_string;
   double step = 1.0;
   double step_base = 0;
   bool required = false;

@@ -2171,6 +2171,10 @@ void AbpController::HandleRequest(const std::string& method,
       if (segments.size() == 4 && method == "POST") {
         blocked = true;
       }
+    } else if (resource == "datetime-picker") {
+      if (segments.size() == 4 && method == "POST") {
+        blocked = true;
+      }
     } else if (resource == "permissions") {
       // POST /permissions/{id}/grant or /permissions/{id}/deny — blocked
       // GET /permissions — allowed
@@ -2423,6 +2427,19 @@ void AbpController::HandleRequest(const std::string& method,
       const std::string& popup_id = segments[3];
       if (method == "POST") {
         HandleSelectPopup(popup_id, params, std::move(callback));
+      } else {
+        SendError(405, "Method not allowed", std::move(callback));
+      }
+      return;
+    }
+  }
+
+  // Route: /api/v1/datetime-picker/{id}
+  if (resource == "datetime-picker") {
+    if (segments.size() == 4) {
+      const std::string& popup_id = segments[3];
+      if (method == "POST") {
+        HandleDateTimePopup(popup_id, params, std::move(callback));
       } else {
         SendError(405, "Method not allowed", std::move(callback));
       }
@@ -7070,6 +7087,53 @@ void AbpController::HandleSelectPopup(const std::string& popup_id,
   // Send the selection
   if (!popup_interceptor_->RespondToSelectPopup(popup_id, indices)) {
     SendError(500, "Failed to respond to select popup", std::move(callback));
+    return;
+  }
+
+  base::Value::Dict result;
+  result.Set("success", true);
+  result.Set("tab_id", *popup_info.FindString("tab_id"));
+  SendJson(200, base::Value(std::move(result)), std::move(callback));
+}
+
+void AbpController::HandleDateTimePopup(const std::string& popup_id,
+                                        const base::Value::Dict& params,
+                                        ResponseCallback callback) {
+  if (!popup_interceptor_) {
+    SendError(500, "Popup interceptor not initialized", std::move(callback));
+    return;
+  }
+
+  // Check if cancel requested
+  if (params.FindBool("cancel").value_or(false)) {
+    if (popup_interceptor_->CancelDateTimePopup(popup_id)) {
+      base::Value::Dict result;
+      result.Set("success", true);
+      result.Set("cancelled", true);
+      SendJson(200, base::Value(std::move(result)), std::move(callback));
+    } else {
+      SendError(404, "Date/time popup not found: " + popup_id,
+                std::move(callback));
+    }
+    return;
+  }
+
+  const std::string* value = params.FindString("value");
+  if (!value) {
+    SendError(400, "Missing 'value' (ISO string)", std::move(callback));
+    return;
+  }
+
+  // Validate popup exists
+  auto popup_info = popup_interceptor_->GetPendingDateTimePopup(popup_id);
+  if (popup_info.empty()) {
+    SendError(404, "Date/time popup not found: " + popup_id,
+              std::move(callback));
+    return;
+  }
+
+  if (!popup_interceptor_->RespondToDateTimePopup(popup_id, *value)) {
+    SendError(500, "Failed to respond to date/time popup", std::move(callback));
     return;
   }
 

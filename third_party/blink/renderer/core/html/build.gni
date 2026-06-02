@@ -94,6 +94,8 @@ blink_core_sources_html = [
   "fenced_frame/fenced_frame_config.h",
   "fenced_frame/html_fenced_frame_element.cc",
   "fenced_frame/html_fenced_frame_element.h",
+  "forms/abp_date_time_chooser.cc",
+  "forms/abp_date_time_chooser.h",
   "forms/autofill_event.cc",
   "forms/autofill_event.h",
   "forms/base_button_input_type.cc",

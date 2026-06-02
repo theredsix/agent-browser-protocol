@@ -603,6 +603,11 @@ class AbpController : public TabStripModelObserver {
                          const base::Value::Dict& params,
                          ResponseCallback callback);
 
+  // Date/time picker endpoint
+  void HandleDateTimePopup(const std::string& popup_id,
+                           const base::Value::Dict& params,
+                           ResponseCallback callback);
+
   // Run file chooser as a full ABP action (resume → set files → wait → pause)
   void RunFileChooserAction(const std::string& tab_id,
                             const std::string& chooser_id,

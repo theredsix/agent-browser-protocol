@@ -2246,6 +2246,13 @@ bool HTMLInputElement::SetupDateTimeChooserParameters(
   parameters.anchor_rect_in_screen =
       GetDocument().View()->FrameToScreen(PixelSnappedBoundingBox());
   parameters.double_value = input_type_->ValueAsDouble();
+  // ABP fork: carry ISO string forms so the browser-routed picker
+  // (AbpDateTimeChooser) does not need to invert the doubles above. For
+  // temporal inputs Value() already returns the serialized ISO string, and the
+  // min/max content attributes are authored as ISO strings.
+  parameters.value_string = Value();
+  parameters.min_string = FastGetAttribute(html_names::kMinAttr);
+  parameters.max_string = FastGetAttribute(html_names::kMaxAttr);
   parameters.focused_field_index = input_type_view_->FocusedFieldIndex();
   parameters.is_anchor_element_rtl =
       GetLayoutObject() &&

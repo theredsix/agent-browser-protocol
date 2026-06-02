@@ -479,6 +479,42 @@ A native `<select>` dropdown popup was intercepted. Use the `id` to respond via 
 }
 ```
 
+#### `datetime_picker_open`
+A native date/time picker (`<input type=date|time|datetime-local|month|week>`) was intercepted. Use the `id` to respond via `POST /datetime-picker/{id}` with an ISO `value` (or `cancel`). Values are ISO strings in the field's own format; `min`/`max` are empty when the attribute is absent.
+
+```json
+{
+  "type": "datetime_picker_open",
+  "virtual_time_ms": 1699999999850,
+  "data": {
+    "id": "dtp_1",
+    "tab_id": "tab_abc123",
+    "input_type": "date",
+    "value": "2026-01-15",
+    "min": "",
+    "max": "",
+    "step": 1,
+    "bounds": {"x": 0, "y": 0, "width": 0, "height": 0}
+  }
+}
+```
+
+Respond with an ISO `value` (required unless cancelling) whose format matches `input_type`:
+
+| `input_type` | `value` format | example |
+|--------------|----------------|---------|
+| `date` | `YYYY-MM-DD` | `2026-06-15` |
+| `time` | `HH:MM` (24h) | `14:45` |
+| `datetime-local` | `YYYY-MM-DDTHH:MM` | `2026-06-15T14:45` |
+| `month` | `YYYY-MM` | `2026-06` |
+| `week` | `YYYY-Www` (ISO week) | `2026-W25` |
+
+```bash
+curl -X POST http://localhost:8222/api/v1/datetime-picker/dtp_1 \
+  -H "Content-Type: application/json" -d '{"value":"2026-06-15"}'
+# or cancel: {"cancel": true}
+```
+
 ### Screenshot Configuration
 
 Control screenshot capture via the `screenshot` object in the request body:
