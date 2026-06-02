@@ -14,9 +14,11 @@
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
@@ -41,6 +43,23 @@ int ModifierFlagsToWebModifiers(int flags) {
   if (flags & 8)
     result |= blink::WebInputEvent::kShiftKey;
   return result;
+}
+
+// Returns the effective page zoom factor for `wc` (1.0 == 100%).
+//
+// Agent-facing coordinates (the ones an agent reads off a screenshot) are in
+// viewport DIP pixels. CDP Input.dispatchMouseEvent, however, interprets its
+// x/y as CSS pixels and multiplies them by this same zoom factor internally
+// (see content's InputHandler::ScaleFactor). Dividing a DIP coordinate by the
+// zoom factor before handing it to CDP therefore lands the event on the exact
+// pixel the agent saw. At 100% zoom this is a no-op; at ABP's default 80% zoom
+// it removes a ~25% positional error. Returns 1.0 for a null/!ready contents.
+double AbpPageZoomFactor(content::WebContents* wc) {
+  if (!wc)
+    return 1.0;
+  double factor =
+      blink::ZoomLevelToZoomFactor(content::HostZoomMap::GetZoomLevel(wc));
+  return factor > 0.0 ? factor : 1.0;
 }
 
 // US keyboard layout mapping for symbols/punctuation.
@@ -337,6 +356,16 @@ void AbpInputDispatcher::Click(const std::string& tab_id,
               LOG(WARNING) << "ABP: Click action - WebContents not found for tab " << ctx->tab_id();
             }
 
+            // Convert the agent's DIP coordinates to the CSS pixels CDP expects
+            // (see AbpPageZoomFactor). The virtual cursor above intentionally
+            // stays in DIP; only the dispatched mouse event is rescaled.
+            double zoom_factor = AbpPageZoomFactor(wc);
+            double cdp_x = coord_x / zoom_factor;
+            double cdp_y = coord_y / zoom_factor;
+            VLOG(1) << "ABP: Click zoom=" << zoom_factor << " DIP=(" << coord_x
+                    << "," << coord_y << ") -> CSS=(" << cdp_x << "," << cdp_y
+                    << ")";
+
             // Keep context alive through async fences + input dispatch.
             scoped_refptr<AbpActionContext> ctx_ref(ctx);
             ctx->controller()->InsertVisualStateFence(
@@ -434,7 +463,7 @@ void AbpInputDispatcher::Click(const std::string& tab_id,
                               },
                               x, y, button, click_count, mods, action_ctx));
                     },
-                    coord_x, coord_y, std::move(btn), count, modifiers,
+                    cdp_x, cdp_y, std::move(btn), count, modifiers,
                     std::move(ctx_ref)));
           },
           click_x, click_y, std::move(button), click_count, mod_flags),
@@ -1535,11 +1564,17 @@ void AbpInputDispatcher::ClickRaw(const std::string& tab_id,
     return;
   }
 
+  // Convert agent DIP coordinates to the CSS pixels CDP expects (see
+  // AbpPageZoomFactor). The virtual cursor above stays in DIP.
+  double zoom_factor = AbpPageZoomFactor(wc);
+  double cdp_x = x / zoom_factor;
+  double cdp_y = y / zoom_factor;
+
   // Send mousePressed
   base::Value::Dict press_params;
   press_params.Set("type", "mousePressed");
-  press_params.Set("x", x);
-  press_params.Set("y", y);
+  press_params.Set("x", cdp_x);
+  press_params.Set("y", cdp_y);
   press_params.Set("button", button);
   press_params.Set("clickCount", click_count);
   press_params.Set("modifiers", mod_flags);
@@ -1585,7 +1620,7 @@ void AbpInputDispatcher::ClickRaw(const std::string& tab_id,
                     },
                     std::move(callback)));
           },
-          x, y, std::move(button), click_count, mod_flags,
+          cdp_x, cdp_y, std::move(button), click_count, mod_flags,
           tab_id, this, std::move(callback)));
 }
 
