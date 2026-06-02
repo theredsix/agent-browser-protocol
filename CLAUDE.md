@@ -15,6 +15,7 @@ A Chromium fork implementing the Agent Browser Protocol (ABP) - a REST-based API
 - **Dialogs**: Get pending dialog info, accept, dismiss (alert/confirm/prompt/beforeunload)
 - **Downloads**: List, get status, cancel
 - **File Chooser**: Provide files to native file picker dialogs
+- **Native Pickers**: Intercept `<select>` dropdowns (cross-platform, incl. Linux/Windows via `use_external_popup_menu`) and date/time pickers (`date`/`time`/`datetime-local`/`month`/`week`, via a `ShowDateTimePopup` mojo → `AbpDateTimeChooser`), surfacing a `select_open`/`datetime_picker_open` event; respond via `/select/{id}` and `/datetime-picker/{id}` (ISO values, applied by Blink)
 - **Permissions**: Intercept permission prompts, grant/deny with type validation (geolocation grant accepts lat/lng/accuracy, auto-deny non-geolocation)
 - **Execution Control**: Pause/resume JS execution with virtual time for deterministic state
 - **Wait**: Duration-based wait with action envelope
@@ -22,7 +23,7 @@ A Chromium fork implementing the Agent Browser Protocol (ABP) - a REST-based API
 - **Input Mode**: Toggle between agent (ABP-controlled), human (user-controlled), and cdp (remote debugging) input modes via API or toolbar icon. Human mode allows direct user interaction (e.g., for authentication), suspends execution control, and shows a yellow gradient border overlay.
 - **Browser Management**: Status check, graceful shutdown
 - **Console Capture**: In-memory 5000-entry FIFO buffer capturing console.log/warn/error, CORS errors, CSP violations, uncaught exceptions via WebContentsObserver (non-fingerprintable, no CDP)
-- **MCP Server**: Embedded MCP (JSON-RPC over HTTP) with 20 tools at `/mcp`
+- **MCP Server**: Embedded MCP (JSON-RPC over HTTP) with 21 tools at `/mcp`
 
 ### Architecture
 
@@ -308,6 +309,7 @@ See `plans/API.md` for the complete REST API specification. All endpoints:
 | POST | `/api/v1/file-chooser/{id}` | Provide files to dialog |
 | **Popups** | | |
 | POST | `/api/v1/select/{id}` | Respond to select popup |
+| POST | `/api/v1/datetime-picker/{id}` | Respond to date/time picker (ISO value or cancel) |
 | **Permissions** | | |
 | GET | `/api/v1/permissions` | List pending permission requests |
 | POST | `/api/v1/permissions/{id}/grant` | Grant permission (requires permission_type; geolocation requires lat/lng) |
@@ -334,7 +336,7 @@ See `plans/API.md` for the complete REST API specification. All endpoints:
 | DELETE | `/api/v1/history/events` | Delete events |
 | DELETE | `/api/v1/history` | Delete all history |
 | **MCP** | | |
-| POST | `/mcp` | MCP JSON-RPC endpoint (20 tools, includes `cdp_mode`) |
+| POST | `/mcp` | MCP JSON-RPC endpoint (21 tools, includes `cdp_mode`) |
 
 ## Development Notes
 

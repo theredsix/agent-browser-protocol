@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ABP date/time picker experiment</title>
+<style>
+  html, body { margin: 0; font: 16px sans-serif; background: #fff; }
+  .row { margin: 18px; }
+  input, select { font-size: 18px; padding: 6px; }
+  label { display: inline-block; width: 130px; }
+</style>
+</head>
+<body>
+  <div class="row"><label>date</label><input type="date" id="date" value="2026-01-15"></div>
+  <div class="row"><label>time</label><input type="time" id="time" value="10:30"></div>
+  <div class="row"><label>datetime-local</label><input type="datetime-local" id="datetime-local" value="2026-01-15T10:30"></div>
+  <div class="row"><label>month</label><input type="month" id="month" value="2026-01"></div>
+  <div class="row"><label>week</label><input type="week" id="week" value="2026-W03"></div>
+  <div class="row"><label>select</label>
+    <select id="select"><option>Alpha</option><option>Beta</option><option>Gamma</option></select>
+  </div>
+
+  <script>
+    // ids to test: the 5 date/time family inputs + the <select> (Part A regression).
+    window.__ids = ['date', 'time', 'datetime-local', 'month', 'week', 'select'];
+
+    // Record input/change events so the driver can confirm a value committed.
+    window.__log = [];
+    window.__ids.forEach(function (id) {
+      var el = document.getElementById(id);
+      ['input', 'change'].forEach(function (type) {
+        el.addEventListener(type, function (e) {
+          window.__log.push({ id: id, evt: type, value: e.target.value });
+        });
+      });
+    });
+
+    // Center coordinates of each control, for the driver.
+    window.__rects = function () {
+      var o = {};
+      window.__ids.forEach(function (id) {
+        var r = document.getElementById(id).getBoundingClientRect();
+        o[id] = { x: Math.round(r.left + r.width / 2),
+                  y: Math.round(r.top + r.height / 2),
+                  w: Math.round(r.width), h: Math.round(r.height) };
+      });
+      return o;
+    };
+
+    // Trigger a date/time picker deterministically (a center click lands on a
+    // sub-field, not the calendar button). showPicker() routes through
+    // ChromeClientImpl::OpenDateTimeChooser -> AbpDateTimeChooser.
+    window.__showPicker = function (id) {
+      try { document.getElementById(id).showPicker(); return 'ok'; }
+      catch (e) { return 'threw: ' + e.name + ': ' + e.message; }
+    };
+  </script>
+</body>
+</html>
