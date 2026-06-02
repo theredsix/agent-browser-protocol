@@ -7,7 +7,14 @@ import("//build/config/features.gni")
 
 declare_args() {
   # Whether or not to use external popup menu.
-  use_external_popup_menu = is_android || (is_apple && use_blink)
+  #
+  # ABP: also enable on desktop Linux and Windows so the ABP popup interceptor
+  # (content::PopupInterceptor, wired in RenderFrameHostImpl::ShowPopupMenu) can
+  # capture <select> dropdowns. Without this, Blink renders those popups as
+  # internal WebPagePopups that never reach the browser-side ShowPopupMenu hook,
+  # so the agent never sees the choices or the select_open event.
+  use_external_popup_menu = is_android || (is_apple && use_blink) ||
+                            ((is_linux || is_win) && use_blink)
 
   # Enables basic plugin support. This enables support for registering and
   # looking up plugins.
