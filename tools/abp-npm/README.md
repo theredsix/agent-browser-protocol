@@ -182,28 +182,34 @@ The `--mcp` flag runs ABP as a stdio MCP proxy — it launches the browser on fi
 codex mcp add browser -- npx -y agent-browser-protocol --mcp
 ```
 
-### Any MCP Client (HTTP)
+### Claude Desktop
 
-Launch ABP:
-
-```bash
-npx -y agent-browser-protocol
-```
-
-Then point your MCP client at `http://localhost:8222/mcp` (streamable HTTP).
-
-For example, in Claude Desktop (`claude_desktop_config.json`):
+Let Claude Desktop launch the server over stdio — no port to coordinate. Add to `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "browser": {
-      "transport": "streamable-http",
-      "url": "http://localhost:8222/mcp"
+      "command": "npx",
+      "args": ["-y", "agent-browser-protocol", "--mcp"]
     }
   }
 }
 ```
+
+Restart Claude Desktop after editing the config.
+
+> **macOS:** Claude Desktop launched from Finder doesn't inherit your shell `PATH`, so a bare `"npx"` can fail with `spawn npx ENOENT`. Use the absolute path instead — find it with `which npx` (e.g. `/opt/homebrew/bin/npx` on Apple Silicon).
+
+### Any MCP Client (HTTP)
+
+ABP auto-selects a port starting at `15678`, and it can change between runs. For a static client config, pin the port with `--port`:
+
+```bash
+npx -y agent-browser-protocol --port 8222
+```
+
+Then point your MCP client at `http://localhost:8222/mcp` (streamable HTTP).
 
 ### Configuration
 

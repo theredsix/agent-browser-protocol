@@ -105,35 +105,41 @@ Configure a model with vision and add the MCP server.
 }
 ```
 
-### Any MCP Client (HTTP)
+### Claude Desktop
 
-Launch ABP:
-
-```bash
-npx -y agent-browser-protocol
-```
-
-Then point your MCP client at `http://localhost:8222/mcp` (streamable HTTP).
-
-For example, in Claude Desktop (`claude_desktop_config.json`):
+Let Claude Desktop launch the server over stdio — no port to coordinate. Add to `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "browser": {
-      "transport": "streamable-http",
-      "url": "http://localhost:8222/mcp"
+      "command": "npx",
+      "args": ["-y", "agent-browser-protocol", "--mcp"]
     }
   }
 }
 ```
 
-### REST (no MCP)
+Restart Claude Desktop after editing the config.
 
-Launch ABP:
+> **macOS:** Claude Desktop launched from Finder doesn't inherit your shell `PATH`, so a bare `"npx"` can fail with `spawn npx ENOENT`. Use the absolute path instead — find it with `which npx` (e.g. `/opt/homebrew/bin/npx` on Apple Silicon).
+
+### Any MCP Client (HTTP)
+
+ABP auto-selects a port starting at `15678`, and it can change between runs. For a static client config, pin the port with `--port`:
 
 ```bash
-npx -y agent-browser-protocol
+npx -y agent-browser-protocol --port 8222
+```
+
+Then point your MCP client at `http://localhost:8222/mcp` (streamable HTTP).
+
+### REST (no MCP)
+
+Launch ABP with a fixed port (the curl examples below assume `8222`):
+
+```bash
+npx -y agent-browser-protocol --port 8222
 ```
 
 Then drive it with curl:
@@ -209,7 +215,7 @@ Docs
 Security notes
 
 * ABP is intended to run locally on your machine.
-* The API is served on localhost by default (--abp-port=8222).
+* The API is served on localhost by default (auto-selected port starting at 15678; pin it with --port).
 * ABP blocks real system input by default; use --allow-system-inputs to override.
 
 ---
@@ -373,9 +379,11 @@ See [TRAINING.md](TRAINING.md) for the SQLite schema, `abp-debug` UI, and traini
 
 ## Command Line Flags
 
+These are flags for the ABP binary itself. When launching through `npx agent-browser-protocol`, use the npm CLI flags instead (e.g. `--port`, `--session-dir`, `--zoom`) — run `npx agent-browser-protocol --help` for the full list.
+
 | Flag | Description |
 |------|-------------|
-| `--abp-port=8222` | API port (default: 8222) |
+| `--abp-port=8222` | API port (binary default: 8222; the npm launcher auto-selects from 15678) |
 | `--abp-session-dir=PATH` | Session data directory (default: /tmp/abp-UUID) |
 | `--abp-config=PATH` | Config file path |
 | `--abp-window-size=W,H` | Window size (default: 1280,887) |
